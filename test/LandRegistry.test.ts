@@ -2,6 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { LandRegistry } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import "@nomicfoundation/hardhat-chai-matchers";
 
 describe("LandRegistry", function () {
   let landRegistry: LandRegistry;
@@ -13,7 +14,7 @@ describe("LandRegistry", function () {
 
   beforeEach(async function () {
     [owner, verifier, user1, user2, user3] = await ethers.getSigners();
-    
+
     const LandRegistry = await ethers.getContractFactory("LandRegistry");
     const LandRegistryFactory = (await ethers.getContractFactory("LandRegistry")) as unknown as { deploy: (...args: any[]) => Promise<LandRegistry> };
     landRegistry = await LandRegistryFactory.deploy();
@@ -209,7 +210,8 @@ describe("LandRegistry", function () {
     it("Should not allow non-owner to add verifier", async function () {
       await expect(
         landRegistry.connect(user1).addVerifier(verifier.address)
-      ).to.be.revertedWith("OwnableUnauthorizedAccount");
+      ).to.be.revertedWithCustomError(landRegistry, "OwnableUnauthorizedAccount")
+        .withArgs(user1.address);
     });
 
     it("Should allow owner to remove verifier", async function () {

@@ -180,46 +180,71 @@ export default function Home() {
 
           {/* Action Cards */}
           {isConnected ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Link href="/register-owner">
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
-                  <div className="text-3xl mb-3">👤</div>
-                  <h3 className="text-lg font-bold mb-2">Register as Owner</h3>
-                  <p className="text-sm text-blue-100">
-                    Register yourself to start managing properties
-                  </p>
-                </div>
-              </Link>
+            <div className="space-y-8">
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <Link href="/register-owner">
+                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">👤</div>
+                    <h3 className="text-lg font-bold mb-2">Register as Owner</h3>
+                    <p className="text-sm text-blue-100">
+                      Register yourself to start managing properties
+                    </p>
+                  </div>
+                </Link>
 
-              <Link href="/register-property">
-                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
-                  <div className="text-3xl mb-3">🏡</div>
-                  <h3 className="text-lg font-bold mb-2">Register Property</h3>
-                  <p className="text-sm text-green-100">
-                    Add a new property to the blockchain
-                  </p>
-                </div>
-              </Link>
+                <Link href="/register-property">
+                  <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">🏡</div>
+                    <h3 className="text-lg font-bold mb-2">Register Property</h3>
+                    <p className="text-sm text-green-100">
+                      Add a new property to the blockchain
+                    </p>
+                  </div>
+                </Link>
 
-              <Link href="/my-properties">
-                <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
-                  <div className="text-3xl mb-3">📋</div>
-                  <h3 className="text-lg font-bold mb-2">My Properties</h3>
-                  <p className="text-sm text-purple-100">
-                    View and manage your properties
-                  </p>
-                </div>
-              </Link>
+                <Link href="/my-properties">
+                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">📋</div>
+                    <h3 className="text-lg font-bold mb-2">My Properties</h3>
+                    <p className="text-sm text-purple-100">
+                      View and manage your properties
+                    </p>
+                  </div>
+                </Link>
 
-              <Link href="/search">
-                <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
-                  <div className="text-3xl mb-3">🔍</div>
-                  <h3 className="text-lg font-bold mb-2">Search Property</h3>
-                  <p className="text-sm text-orange-100">
-                    Look up any property by ID
-                  </p>
-                </div>
-              </Link>
+                <Link href="/search">
+                  <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">🔍</div>
+                    <h3 className="text-lg font-bold mb-2">Search Property</h3>
+                    <p className="text-sm text-orange-100">
+                      Look up any property by ID
+                    </p>
+                  </div>
+                </Link>
+              </div>
+
+              {/* Additional Navigation */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <Link href="/dashboard">
+                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">📊</div>
+                    <h3 className="text-lg font-bold mb-2">Analytics Dashboard</h3>
+                    <p className="text-sm text-indigo-100">
+                      View registry statistics and recent activity
+                    </p>
+                  </div>
+                </Link>
+
+                <Link href="/admin">
+                  <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">🔐</div>
+                    <h3 className="text-lg font-bold mb-2">Admin Panel</h3>
+                    <p className="text-sm text-red-100">
+                      Government verifier dashboard (restricted access)
+                    </p>
+                  </div>
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-8 text-center">

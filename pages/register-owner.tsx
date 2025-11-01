@@ -18,23 +18,94 @@ export default function RegisterOwner() {
     setMessage('');
 
     try {
+      console.log('Starting registration...');
+      console.log('Contract Address:', process.env.NEXT_PUBLIC_LAND_REGISTRY_ADDRESS);
+      
+      // Check network first
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        const chainId = await (window as any).ethereum.request({ method: 'eth_chainId' });
+        console.log('Current Chain ID:', chainId);
+        
+        if (chainId !== '0x539') { // 0x539 = 1337 in hex
+          console.log('Wrong network detected, trying to switch...');
+          try {
+            // Try to switch to Ganache network
+            await (window as any).ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x539' }], // 1337 in hex
+            });
+            console.log('Successfully switched to Ganache network');
+          } catch (switchError: any) {
+            if (switchError.code === 4902) {
+              // Network not added to MetaMask, try to add it
+              try {
+                await (window as any).ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '0x539',
+                    chainName: 'Ganache Local',
+                    nativeCurrency: {
+                      name: 'Ethereum',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: ['http://127.0.0.1:8545'],
+                  }],
+                });
+                console.log('Successfully added and switched to Ganache network');
+              } catch (addError) {
+                setMessage('❌ Please manually switch to Ganache Local network in MetaMask');
+                setLoading(false);
+                return;
+              }
+            } else {
+              setMessage('❌ Please manually switch to Ganache Local network in MetaMask');
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      }
+      
       const signer = await getSigner();
+      console.log('Signer obtained:', await signer.getAddress());
+      
       const contract = getContract(signer);
+      console.log('Contract instance created');
 
+      console.log('Calling registerOwner with:', formData);
       const tx = await contract.registerOwner(
         formData.name,
         formData.idDocument,
         formData.contactInfo
       );
 
-      setMessage('Transaction submitted. Waiting for confirmation...');
-      await tx.wait();
+      console.log('Transaction submitted:', tx.hash);
+      setMessage(`Transaction submitted: ${tx.hash}. Waiting for confirmation...`);
+
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed:', receipt);
 
       setMessage('✅ Successfully registered as owner!');
       setFormData({ name: '', idDocument: '', contactInfo: '' });
     } catch (error: any) {
-      console.error(error);
-      setMessage(`❌ Error: ${error.reason || error.message || 'Transaction failed'}`);
+      console.error('Full error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      console.error('Error reason:', error.reason);
+
+      let errorMessage = 'Transaction failed';
+      if (error.code === 'NETWORK_ERROR') {
+        errorMessage = 'Network connection error. Make sure you\'re on Ganache Local network.';
+      } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+        errorMessage = 'Contract execution failed. Check if contract is deployed correctly.';
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setMessage(`❌ Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -61,7 +132,7 @@ export default function RegisterOwner() {
         <main className="container mx-auto px-4 py-12 max-w-2xl">
           <div className="bg-white rounded-xl shadow-lg p-8">
             <h2 className="text-3xl font-bold text-gray-800 mb-6">Register as Owner</h2>
-            
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
