@@ -46,6 +46,17 @@ export default function RegisterProperty() {
 
   const [states] = useState(getAllStates());
   const [districts, setDistricts] = useState<string[]>([]);
+  
+  // File uploads state
+  const [propertyDocument, setPropertyDocument] = useState<File | null>(null);
+  const [propertyPhotos, setPropertyPhotos] = useState<File[]>([]);
+  const [documentPreview, setDocumentPreview] = useState<string>('');
+  const [photosPreviews, setPhotosPreviews] = useState<string[]>([]);
+  
+  // Verification dialog state
+  const [showVerificationDialog, setShowVerificationDialog] = useState(false);
+  const [registeredPropertyId, setRegisteredPropertyId] = useState<string>('');
+  const [sendingVerification, setSendingVerification] = useState(false);
 
   useEffect(() => {
     checkWalletConnection();
@@ -138,6 +149,89 @@ export default function RegisterProperty() {
     }));
   };
 
+  const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type (PDF, images)
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please upload a PDF or image file (JPG, PNG)');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size must be less than 5MB');
+        return;
+      }
+      
+      setPropertyDocument(file);
+      
+      // Create preview for images
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setDocumentPreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setDocumentPreview('');
+      }
+    }
+  };
+
+  const handlePhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Validate total photos (max 5)
+    if (propertyPhotos.length + files.length > 5) {
+      alert('You can upload maximum 5 photos');
+      return;
+    }
+    
+    // Validate each file
+    const validFiles: File[] = [];
+    const newPreviews: string[] = [];
+    
+    files.forEach(file => {
+      // Validate file type (images only)
+      if (!file.type.startsWith('image/')) {
+        alert(`${file.name} is not an image file`);
+        return;
+      }
+      
+      // Validate file size (max 3MB per photo)
+      if (file.size > 3 * 1024 * 1024) {
+        alert(`${file.name} is too large. Max size is 3MB`);
+        return;
+      }
+      
+      validFiles.push(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        newPreviews.push(reader.result as string);
+        if (newPreviews.length === validFiles.length) {
+          setPhotosPreviews(prev => [...prev, ...newPreviews]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    setPropertyPhotos(prev => [...prev, ...validFiles]);
+  };
+
+  const removePhoto = (index: number) => {
+    setPropertyPhotos(prev => prev.filter((_, i) => i !== index));
+    setPhotosPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeDocument = () => {
+    setPropertyDocument(null);
+    setDocumentPreview('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -151,7 +245,29 @@ export default function RegisterProperty() {
       return;
     }
 
+    // Generate document hash from uploaded files
+    let documentHash = 'QmPropertyDocument'; // Placeholder
+    if (propertyDocument || propertyPhotos.length > 0) {
+      // In production, you would upload to IPFS and get the hash
+      // For now, we'll create a simple hash
+      const timestamp = Date.now();
+      documentHash = `Qm${timestamp}${propertyDocument?.name || 'docs'}`;
+      
+      // Store files in localStorage for demo (in production, use IPFS/decentralized storage)
+      const propertyFiles = {
+        document: documentPreview, // base64 encoded document
+        photos: photosPreviews, // array of base64 encoded photos
+        documentName: propertyDocument?.name || '',
+        timestamp: timestamp
+      };
+      
+      // We'll store by documentHash so government portal can retrieve it
+      localStorage.setItem(`property_files_${documentHash}`, JSON.stringify(propertyFiles));
+    }
+
     setRegistering(true);
+    setMessage('📤 Uploading documents and registering property...');
+    
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
@@ -164,31 +280,23 @@ export default function RegisterProperty() {
         propertyData.propertyType,
         propertyData.surveyNumber || '',
         propertyData.subDivision || '',
-        propertyData.documentHash || 'QmPropertyDocument' // Placeholder IPFS hash
+        documentHash
       );
       
       console.log('Transaction sent:', tx.hash);
-      setMessage('Property registration transaction sent! Please wait for confirmation...');
+      setMessage('⏳ Property registration transaction sent! Waiting for confirmation...');
       
-      await tx.wait();
-      setMessage('✅ Property registered successfully! Redirecting to dashboard...');
+      const receipt = await tx.wait();
+      console.log('Transaction receipt:', receipt);
       
-      // Clear form
-      setPropertyData({
-        address: '',
-        district: '',
-        state: '',
-        area: '',
-        propertyType: '',
-        surveyNumber: '',
-        subDivision: '',
-        documentHash: ''
-      });
+      // Extract property ID from transaction logs
+      const propertyId = receipt.logs[0]?.topics[1] || '0';
+      setRegisteredPropertyId(propertyId);
       
-      // Redirect to dashboard after 2 seconds
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
+      setMessage('✅ Property registered successfully!');
+      
+      // Show verification dialog
+      setShowVerificationDialog(true);
       
     } catch (error: any) {
       console.error('Error registering property:', error);
@@ -196,6 +304,45 @@ export default function RegisterProperty() {
     } finally {
       setRegistering(false);
     }
+  };
+
+  const handleSendForVerification = async () => {
+    setSendingVerification(true);
+    setMessage('📝 Sending property for verification...');
+    
+    try {
+      const signer = await getSigner();
+      const contract = getContract(signer);
+      
+      // Get verification fee from contract
+      const verificationFee = await contract.VERIFICATION_FEE();
+      
+      const tx = await contract.requestPropertyVerification(
+        registeredPropertyId,
+        { value: verificationFee }
+      );
+      
+      console.log('Verification request sent:', tx.hash);
+      setMessage('⏳ Verification request transaction sent! Waiting for confirmation...');
+      
+      await tx.wait();
+      setMessage('✅ Property sent for verification! Redirecting to dashboard...');
+      
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Error sending for verification:', error);
+      setMessage('❌ Failed to send for verification: ' + (error.message || 'Unknown error'));
+    } finally {
+      setSendingVerification(false);
+    }
+  };
+
+  const handleBackToHome = () => {
+    router.push('/');
   };
 
   if (!isConnected) {
@@ -448,22 +595,113 @@ export default function RegisterProperty() {
                     />
                   </div>
 
-                  {/* Document Hash */}
+                  {/* Property Document Upload */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Document Hash (Optional)
+                      Property Document *
                     </label>
-                    <input
-                      type="text"
-                      name="documentHash"
-                      value={propertyData.documentHash}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="IPFS hash of property documents"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      If you have uploaded property documents to IPFS, enter the hash here
-                    </p>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition">
+                      {!propertyDocument ? (
+                        <div className="text-center">
+                          <div className="text-4xl mb-2">📄</div>
+                          <label className="cursor-pointer">
+                            <span className="text-primary-600 hover:text-primary-700 font-semibold">
+                              Click to upload property document
+                            </span>
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={handleDocumentUpload}
+                              className="hidden"
+                              required
+                            />
+                          </label>
+                          <p className="text-xs text-gray-500 mt-2">
+                            PDF or Image (JPG, PNG) - Max 5MB
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            {documentPreview ? (
+                              <img src={documentPreview} alt="Document preview" className="w-16 h-16 object-cover rounded" />
+                            ) : (
+                              <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
+                                <span className="text-2xl">📄</span>
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-semibold text-gray-800">{propertyDocument.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {(propertyDocument.size / 1024).toFixed(2)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={removeDocument}
+                            className="text-red-600 hover:text-red-700 font-semibold"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Property Photos Upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Property Photos (Optional - Max 5)
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary-500 transition">
+                      {propertyPhotos.length < 5 && (
+                        <div className="text-center mb-4">
+                          <div className="text-4xl mb-2">📸</div>
+                          <label className="cursor-pointer">
+                            <span className="text-primary-600 hover:text-primary-700 font-semibold">
+                              Click to upload property photos
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={handlePhotosUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          <p className="text-xs text-gray-500 mt-2">
+                            Images only - Max 3MB each - {5 - propertyPhotos.length} remaining
+                          </p>
+                        </div>
+                      )}
+                      
+                      {propertyPhotos.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          {photosPreviews.map((preview, index) => (
+                            <div key={index} className="relative group">
+                              <img 
+                                src={preview} 
+                                alt={`Property photo ${index + 1}`} 
+                                className="w-full h-32 object-cover rounded-lg"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removePhoto(index)}
+                                className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                              <p className="text-xs text-gray-600 mt-1 truncate">
+                                {propertyPhotos[index].name}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Message Display */}
@@ -511,6 +749,107 @@ export default function RegisterProperty() {
             </div>
           )}
         </main>
+
+        {/* Verification Dialog Modal */}
+        {showVerificationDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 animate-fadeIn">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-4xl">✅</span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                  Property Registered!
+                </h3>
+                <p className="text-gray-600">
+                  Your property has been successfully registered on the blockchain.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                  <strong>Property ID:</strong> #{registeredPropertyId.toString()}
+                </p>
+                <p className="text-sm text-blue-700 mt-2">
+                  Would you like to send this property for verification by a government officer?
+                </p>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div className="flex items-start space-x-3">
+                  <span className="text-green-600 mt-1">✓</span>
+                  <div>
+                    <p className="font-semibold text-gray-800">Fast Verification</p>
+                    <p className="text-sm text-gray-600">Get verified by state officials</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <span className="text-green-600 mt-1">✓</span>
+                  <div>
+                    <p className="font-semibold text-gray-800">Enable Transfers</p>
+                    <p className="text-sm text-gray-600">Verified properties can be transferred</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <span className="text-green-600 mt-1">✓</span>
+                  <div>
+                    <p className="font-semibold text-gray-800">Official Recognition</p>
+                    <p className="text-sm text-gray-600">Get government authentication</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
+                <p className="text-xs text-yellow-800">
+                  <strong>Note:</strong> Verification requires a small fee (0.001 ETH) and will be processed by government officers in your state and district.
+                </p>
+              </div>
+
+              {message && message.includes('verification') && (
+                <div className={`p-3 rounded-lg mb-4 text-sm ${
+                  message.includes('✅') 
+                    ? 'bg-green-50 text-green-800' 
+                    : message.includes('❌')
+                    ? 'bg-red-50 text-red-800'
+                    : 'bg-blue-50 text-blue-800'
+                }`}>
+                  {message}
+                </div>
+              )}
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleBackToHome}
+                  disabled={sendingVerification}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-semibold disabled:opacity-50"
+                >
+                  Back to Home
+                </button>
+                <button
+                  onClick={handleSendForVerification}
+                  disabled={sendingVerification}
+                  className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold disabled:opacity-50 flex items-center justify-center space-x-2"
+                >
+                  {sendingVerification ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>📝</span>
+                      <span>Send for Verification</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <p className="text-xs text-center text-gray-500 mt-4">
+                You can also send for verification later from your dashboard
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

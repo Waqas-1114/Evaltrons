@@ -35,6 +35,9 @@ export default function Dashboard() {
   const [isConnected, setIsConnected] = useState(false);
   const [ownerInfo, setOwnerInfo] = useState<OwnerInfo | null>(null);
   const [loadingOwner, setLoadingOwner] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState<any>(null);
+  const [deletingProperty, setDeletingProperty] = useState(false);
 
   useEffect(() => {
     checkWalletConnection();
@@ -125,6 +128,47 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteProperty = (property: any) => {
+    setPropertyToDelete(property);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteProperty = async () => {
+    if (!propertyToDelete) return;
+
+    setDeletingProperty(true);
+    try {
+      // In a real blockchain system, you can't truly "delete" data for immutability
+      // Instead, we'll mark it as deleted in localStorage
+      const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
+      deletedProperties.push(propertyToDelete.id);
+      localStorage.setItem('deleted_properties', JSON.stringify(deletedProperties));
+
+      // Also remove the property files if they exist
+      const provider = getProvider();
+      const contract = getContract(provider);
+      const propDetails = await contract.getPropertyDetails(propertyToDelete.id);
+      const documentHash = propDetails.documentHash;
+      
+      if (documentHash) {
+        localStorage.removeItem(`property_files_${documentHash}`);
+      }
+
+      alert('✅ Property marked as deleted successfully! It will no longer appear in your dashboard.');
+      
+      // Reload dashboard data
+      await loadDashboardData();
+      
+      setShowDeleteModal(false);
+      setPropertyToDelete(null);
+    } catch (error) {
+      console.error('Error deleting property:', error);
+      alert('❌ Failed to delete property. Please try again.');
+    } finally {
+      setDeletingProperty(false);
+    }
+  };
+
   const loadDashboardData = async () => {
     setLoading(true);
     try {
@@ -142,9 +186,17 @@ export default function Dashboard() {
       let verifiedCount = 0;
       let pendingCount = 0;
       const recentProps = [];
+      
+      // Get list of deleted properties from localStorage
+      const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
 
       for (let i = Math.max(1, totalProperties - 9); i <= totalProperties; i++) {
         try {
+          // Skip if property is marked as deleted
+          if (deletedProperties.includes(i)) {
+            continue;
+          }
+          
           const property = await contract.getPropertyDetails(i);
           if (property.isRegistered) {
             if (property.isVerified) {
@@ -187,8 +239,11 @@ export default function Dashboard() {
         }
       }
 
+      // Calculate actual total properties (excluding deleted ones)
+      const actualTotalProperties = totalProperties - deletedProperties.length;
+
       setStats({
-        totalProperties,
+        totalProperties: actualTotalProperties,
         totalTransfers,
         verifiedProperties: verifiedCount,
         pendingVerifications: pendingCount,
@@ -486,8 +541,8 @@ export default function Dashboard() {
                   ) : (
                     <div className="space-y-4">
                       {stats.recentProperties.slice(0, 5).map((property) => (
-                        <div key={property.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
+                        <div key={property.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                          <div className="flex-1">
                             <p className="font-semibold text-gray-800">#{property.id}</p>
                             <p className="text-sm text-gray-600 truncate max-w-48">
                               {property.address}
@@ -496,17 +551,26 @@ export default function Dashboard() {
                               {property.city}, {property.state}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                              property.verified 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {property.verified ? 'Verified' : 'Pending'}
-                            </span>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {formatDate(property.registrationDate)}
-                            </p>
+                          <div className="text-right flex items-center gap-3">
+                            <div>
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                                property.verified 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {property.verified ? 'Verified' : 'Pending'}
+                              </span>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {formatDate(property.registrationDate)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteProperty(property)}
+                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-semibold"
+                              title="Delete Property"
+                            >
+                              🗑️
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -589,6 +653,55 @@ export default function Dashboard() {
             </>
           )}
         </main>
+
+        {/* Delete Property Confirmation Modal */}
+        {showDeleteModal && propertyToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 animate-fadeIn">
+              <div className="text-center mb-6">
+                <div className="text-5xl mb-4">⚠️</div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Delete Property?</h2>
+                <p className="text-gray-600">
+                  Are you sure you want to delete this property? This action will remove it from your dashboard.
+                </p>
+              </div>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p className="font-semibold text-gray-800 mb-1">Property #{propertyToDelete.id}</p>
+                <p className="text-sm text-gray-600">{propertyToDelete.address}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {propertyToDelete.city}, {propertyToDelete.state}
+                </p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-yellow-800">
+                  <strong>Note:</strong> Due to blockchain immutability, the property record will remain on the blockchain but will be hidden from your dashboard.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setPropertyToDelete(null);
+                  }}
+                  disabled={deletingProperty}
+                  className="flex-1 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-semibold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteProperty}
+                  disabled={deletingProperty}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:opacity-50"
+                >
+                  {deletingProperty ? '🔄 Deleting...' : '🗑️ Delete Property'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

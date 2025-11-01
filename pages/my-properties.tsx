@@ -122,10 +122,20 @@ export default function MyProperties() {
       
       const propertyIds = await contract.getOwnerProperties(account);
       
+      // Get list of deleted properties from localStorage
+      const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
+      
       const propertyPromises = propertyIds.map(async (id: bigint) => {
+        const propertyId = Number(id);
+        
+        // Skip if property is marked as deleted
+        if (deletedProperties.includes(propertyId)) {
+          return null;
+        }
+        
         const details = await contract.getPropertyDetails(id);
         return {
-          propertyId: Number(id),
+          propertyId: propertyId,
           propertyAddress: details.propertyAddress,
           district: details.district,
           city: details.city,
@@ -141,7 +151,8 @@ export default function MyProperties() {
       });
       
       const propertiesData = await Promise.all(propertyPromises);
-      setProperties(propertiesData);
+      // Filter out null values (deleted properties)
+      setProperties(propertiesData.filter(p => p !== null) as Property[]);
     } catch (error) {
       console.error('Error loading properties:', error);
     } finally {

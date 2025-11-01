@@ -168,51 +168,7 @@ export default function RegisterOwner() {
       console.log('Starting registration...');
       console.log('Contract Address:', process.env.NEXT_PUBLIC_LAND_REGISTRY_ADDRESS);
       
-      // Check network first
-      if (typeof window !== 'undefined' && (window as any).ethereum) {
-        const chainId = await (window as any).ethereum.request({ method: 'eth_chainId' });
-        console.log('Current Chain ID:', chainId);
-        
-        if (chainId !== '0x539') { // 0x539 = 1337 in hex
-          console.log('Wrong network detected, trying to switch...');
-          try {
-            // Try to switch to Ganache network
-            await (window as any).ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x539' }], // 1337 in hex
-            });
-            console.log('Successfully switched to Ganache network');
-          } catch (switchError: any) {
-            if (switchError.code === 4902) {
-              // Network not added to MetaMask, try to add it
-              try {
-                await (window as any).ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [{
-                    chainId: '0x539',
-                    chainName: 'Ganache Local',
-                    nativeCurrency: {
-                      name: 'Ethereum',
-                      symbol: 'ETH',
-                      decimals: 18
-                    },
-                    rpcUrls: ['http://127.0.0.1:8545'],
-                  }],
-                });
-                console.log('Successfully added and switched to Ganache network');
-              } catch (addError) {
-                setMessage('❌ Please manually switch to Ganache Local network in MetaMask');
-                setLoading(false);
-                return;
-              }
-            } else {
-              setMessage('❌ Please manually switch to Ganache Local network in MetaMask');
-              setLoading(false);
-              return;
-            }
-          }
-        }
-      }
+      setMessage('🔄 Connecting to blockchain...');
       
       const signer = await getSigner();
       console.log('Signer obtained:', await signer.getAddress());
@@ -220,7 +176,9 @@ export default function RegisterOwner() {
       const contract = getContract(signer);
       console.log('Contract instance created');
 
+      setMessage('📝 Submitting registration...');
       console.log('Calling registerOwner with:', formData);
+      
       const tx = await contract.registerOwner(
         formData.name,
         formData.idDocument,
@@ -230,13 +188,15 @@ export default function RegisterOwner() {
       );
 
       console.log('Transaction submitted:', tx.hash);
-      setMessage(`Transaction submitted: ${tx.hash}. Waiting for confirmation...`);
+      setMessage(`⏳ Transaction submitted (${tx.hash.slice(0, 10)}...). Waiting for confirmation...`);
 
       const receipt = await tx.wait();
       console.log('Transaction confirmed:', receipt);
 
       setMessage('✅ Successfully registered as owner! Redirecting to dashboard...');
-      setFormData({ name: '', idDocument: '', contactInfo: '', homeState: '', homeDistrict: '' });      // Redirect to dashboard after 2 seconds
+      setFormData({ name: '', idDocument: '', contactInfo: '', homeState: '', homeDistrict: '' });
+      
+      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push('/dashboard');
       }, 2000);
@@ -247,10 +207,15 @@ export default function RegisterOwner() {
       console.error('Error reason:', error.reason);
 
       let errorMessage = 'Transaction failed';
-      if (error.code === 'NETWORK_ERROR') {
-        errorMessage = 'Network connection error. Make sure you\'re on Ganache Local network.';
+      
+      if (error.message && error.message.includes('circuit breaker')) {
+        errorMessage = 'MetaMask connection issue. Please: 1) Close and reopen MetaMask, 2) Switch to Ganache Local network, 3) Try again';
+      } else if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected';
+      } else if (error.code === 'NETWORK_ERROR') {
+        errorMessage = 'Network connection error. Make sure you\'re on Ganache Local network (Chain ID: 1337)';
       } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
-        errorMessage = 'Contract execution failed. Check if contract is deployed correctly.';
+        errorMessage = 'Contract execution failed. Make sure Ganache is running and contract is deployed.';
       } else if (error.reason) {
         errorMessage = error.reason;
       } else if (error.message) {
@@ -486,43 +451,7 @@ export default function RegisterOwner() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Home State *
-                </label>
-                <select
-                  required
-                  value={formData.homeState}
-                  onChange={(e) => setFormData({ ...formData, homeState: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="">Select State</option>
-                  {states.map((state) => (
-                    <option key={state} value={state}>{state}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Home District *
-                </label>
-                <select
-                  required
-                  value={formData.homeDistrict}
-                  onChange={(e) => setFormData({ ...formData, homeDistrict: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  disabled={!formData.homeState}
-                >
-                  <option value="">Select District</option>
-                  {districts.map((district) => (
-                    <option key={district} value={district}>{district}</option>
-                  ))}
-                </select>
-                {!formData.homeState && (
-                  <p className="text-xs text-gray-500 mt-1">Please select a state first</p>
-                )}
-              </div>
+              
 
               {message && (
                 <div className={`p-4 rounded-lg ${message.includes('✅') ? 'bg-green-50 text-green-800' : message.includes('❌') ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
