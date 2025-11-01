@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { ethers } from 'ethers';
-import { getContract, getProvider } from '../utils/contract';
+import { getContract, getProvider, getSigner } from '../utils/contract';
 
 interface DashboardStats {
   totalProperties: number;
@@ -11,6 +11,14 @@ interface DashboardStats {
   pendingVerifications: number;
   recentProperties: any[];
   recentTransfers: any[];
+}
+
+interface OwnerInfo {
+  name: string;
+  idDocument: string;
+  contactInfo: string;
+  isVerified: boolean;
+  isRegistered: boolean;
 }
 
 export default function Dashboard() {
@@ -23,10 +31,99 @@ export default function Dashboard() {
     recentTransfers: []
   });
   const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState<string>('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [ownerInfo, setOwnerInfo] = useState<OwnerInfo | null>(null);
+  const [loadingOwner, setLoadingOwner] = useState(false);
 
   useEffect(() => {
+    checkWalletConnection();
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (account) {
+      loadOwnerInfo();
+    }
+  }, [account]);
+
+  const checkWalletConnection = async () => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      try {
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const accounts = await provider.listAccounts();
+        
+        if (accounts.length > 0) {
+          const signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          setAccount(address);
+          setIsConnected(true);
+        }
+      } catch (error) {
+        console.error('Error checking wallet connection:', error);
+      }
+    }
+  };
+
+  const connectWallet = async () => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      try {
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        await provider.send('eth_requestAccounts', []);
+        const signer = await provider.getSigner();
+        const address = await signer.getAddress();
+        
+        setAccount(address);
+        setIsConnected(true);
+      } catch (error) {
+        console.error('Error connecting wallet:', error);
+        alert('Failed to connect wallet. Please make sure MetaMask is installed.');
+      }
+    } else {
+      alert('Please install MetaMask to use this application.');
+    }
+  };
+
+  const loadOwnerInfo = async () => {
+    if (!account) return;
+    
+    setLoadingOwner(true);
+    try {
+      const provider = getProvider();
+      const contract = getContract(provider);
+      
+      const ownerDetails = await contract.getOwnerDetails(account);
+      
+      if (ownerDetails.name) {
+        setOwnerInfo({
+          name: ownerDetails.name,
+          idDocument: ownerDetails.idDocument,
+          contactInfo: ownerDetails.contactInfo,
+          isVerified: ownerDetails.isVerified,
+          isRegistered: true
+        });
+      } else {
+        setOwnerInfo({
+          name: '',
+          idDocument: '',
+          contactInfo: '',
+          isVerified: false,
+          isRegistered: false
+        });
+      }
+    } catch (error) {
+      console.error('Error loading owner info:', error);
+      setOwnerInfo({
+        name: '',
+        idDocument: '',
+        contactInfo: '',
+        isVerified: false,
+        isRegistered: false
+      });
+    } finally {
+      setLoadingOwner(false);
+    }
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -139,12 +236,29 @@ export default function Dashboard() {
                 </div>
               </Link>
               
-              <Link
-                href="/"
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold"
-              >
-                Back to Home
-              </Link>
+              <div className="flex items-center space-x-4">
+                {isConnected ? (
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Connected Account</p>
+                    <p className="text-sm font-mono font-semibold text-gray-700">
+                      {account.slice(0, 6)}...{account.slice(-4)}
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={connectWallet}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-semibold"
+                  >
+                    Connect Wallet
+                  </button>
+                )}
+                <Link
+                  href="/"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold"
+                >
+                  Back to Home
+                </Link>
+              </div>
             </div>
           </div>
         </header>
@@ -157,6 +271,84 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              {/* Owner Info Section */}
+              {isConnected && (
+                <div className="mb-8">
+                  {loadingOwner ? (
+                    <div className="bg-white rounded-xl shadow-lg p-6">
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                        <span className="ml-2 text-gray-600">Loading owner info...</span>
+                      </div>
+                    </div>
+                  ) : ownerInfo?.isRegistered ? (
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl shadow-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="text-3xl">👤</div>
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-800">Welcome back, {ownerInfo.name}!</h3>
+                            <p className="text-sm text-gray-600">Registered Owner Dashboard</p>
+                          </div>
+                        </div>
+                        <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                          ownerInfo.isVerified 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          <span className="text-sm font-semibold">
+                            {ownerInfo.isVerified ? '✅ Government Verified' : '⏳ Pending Verification'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-sm text-gray-500 mb-1">Contact Info</p>
+                          <p className="font-semibold text-gray-800">{ownerInfo.contactInfo}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500 mb-1">Wallet Address</p>
+                          <p className="font-mono text-sm text-gray-700">{account.slice(0, 20)}...</p>
+                        </div>
+                        <div className="flex justify-end space-x-2">
+                          <Link
+                            href="/register-property"
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold text-sm"
+                          >
+                            Register Property
+                          </Link>
+                          <Link
+                            href="/my-properties"
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold text-sm"
+                          >
+                            My Properties
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-lg p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="text-3xl">🆔</div>
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-800">Owner Registration Required</h3>
+                            <p className="text-sm text-gray-600">Register as an owner to access full features</p>
+                          </div>
+                        </div>
+                        <Link
+                          href="/register-owner"
+                          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                        >
+                          Register as Owner
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Key Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">

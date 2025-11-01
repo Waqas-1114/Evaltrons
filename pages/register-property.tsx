@@ -1,33 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { ethers } from 'ethers';
 import { getContract, getSigner } from '../utils/contract';
+import { getAllStates, getDistrictsByState } from '../data/indiaData';
 
 interface Owner {
   ownerAddress: string;
   name: string;
   idDocument: string;
   contactInfo: string;
+  homeState: string;
+  homeDistrict: string;
   isVerified: boolean;
 }
 
+const PROPERTY_TYPES = [
+  'Residential',
+  'Commercial', 
+  'Agricultural',
+  'Industrial'
+];
+
 export default function RegisterProperty() {
+  const router = useRouter();
   const [account, setAccount] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [message, setMessage] = useState('');
 
   // Form state
   const [propertyData, setPropertyData] = useState({
     address: '',
     district: '',
-    city: '',
     state: '',
     area: '',
+    propertyType: '',
+    surveyNumber: '',
+    subDivision: '',
     documentHash: ''
   });
+
+  const [states] = useState(getAllStates());
+  const [districts, setDistricts] = useState<string[]>([]);
 
   useEffect(() => {
     checkWalletConnection();
@@ -38,6 +56,14 @@ export default function RegisterProperty() {
       loadOwnerDetails();
     }
   }, [account]);
+
+  useEffect(() => {
+    if (propertyData.state) {
+      const stateDistricts = getDistrictsByState(propertyData.state);
+      setDistricts(stateDistricts);
+      setPropertyData(prev => ({ ...prev, district: '' }));
+    }
+  }, [propertyData.state]);
 
   const checkWalletConnection = async () => {
     if (typeof window !== 'undefined' && window.ethereum) {
@@ -92,6 +118,8 @@ export default function RegisterProperty() {
           name: ownerDetails.name,
           idDocument: ownerDetails.idDocument,
           contactInfo: ownerDetails.contactInfo,
+          homeState: ownerDetails.homeState,
+          homeDistrict: ownerDetails.homeDistrict,
           isVerified: ownerDetails.isVerified
         });
       }
@@ -102,7 +130,7 @@ export default function RegisterProperty() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setPropertyData(prev => ({
       ...prev,
@@ -118,7 +146,7 @@ export default function RegisterProperty() {
       return;
     }
 
-    if (!propertyData.address || !propertyData.city || !propertyData.state || !propertyData.area) {
+    if (!propertyData.address || !propertyData.district || !propertyData.state || !propertyData.area || !propertyData.propertyType) {
       alert('Please fill in all required fields');
       return;
     }
@@ -130,32 +158,41 @@ export default function RegisterProperty() {
       
       const tx = await contract.registerProperty(
         propertyData.address,
-        propertyData.district || '',
-        propertyData.city,
+        propertyData.district,
         propertyData.state,
         ethers.parseUnits(propertyData.area, 0), // Convert to BigNumber
+        propertyData.propertyType,
+        propertyData.surveyNumber || '',
+        propertyData.subDivision || '',
         propertyData.documentHash || 'QmPropertyDocument' // Placeholder IPFS hash
       );
       
       console.log('Transaction sent:', tx.hash);
-      alert('Property registration transaction sent! Please wait for confirmation...');
+      setMessage('Property registration transaction sent! Please wait for confirmation...');
       
       await tx.wait();
-      alert('Property registered successfully!');
+      setMessage('✅ Property registered successfully! Redirecting to dashboard...');
       
       // Clear form
       setPropertyData({
         address: '',
         district: '',
-        city: '',
         state: '',
         area: '',
+        propertyType: '',
+        surveyNumber: '',
+        subDivision: '',
         documentHash: ''
       });
       
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2000);
+      
     } catch (error: any) {
       console.error('Error registering property:', error);
-      alert('Failed to register property: ' + (error.message || 'Unknown error'));
+      setMessage('❌ Failed to register property: ' + (error.message || 'Unknown error'));
     } finally {
       setRegistering(false);
     }
@@ -260,6 +297,7 @@ export default function RegisterProperty() {
                   <div>
                     <h2 className="text-xl font-bold text-gray-800">Owner: {owner.name}</h2>
                     <p className="text-gray-600">Contact: {owner.contactInfo}</p>
+                    <p className="text-gray-600">Location: {owner.homeDistrict}, {owner.homeState}</p>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
@@ -301,50 +339,96 @@ export default function RegisterProperty() {
                   </div>
 
                   {/* Location Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        District
-                      </label>
-                      <input
-                        type="text"
-                        name="district"
-                        value={propertyData.district}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="e.g., Downtown"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        City *
-                      </label>
-                      <input
-                        type="text"
-                        name="city"
-                        value={propertyData.city}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="e.g., New York"
-                        required
-                      />
-                    </div>
-
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
                         State *
                       </label>
-                      <input
-                        type="text"
+                      <select
                         name="state"
                         value={propertyData.state}
                         onChange={handleInputChange}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="e.g., NY"
                         required
+                      >
+                        <option value="">Select State</option>
+                        {states.map((state) => (
+                          <option key={state} value={state}>{state}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        District *
+                      </label>
+                      <select
+                        name="district"
+                        value={propertyData.district}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        disabled={!propertyData.state}
+                        required
+                      >
+                        <option value="">Select District</option>
+                        {districts.map((district) => (
+                          <option key={district} value={district}>{district}</option>
+                        ))}
+                      </select>
+                      {!propertyData.state && (
+                        <p className="text-xs text-gray-500 mt-1">Please select a state first</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Property Type and Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Property Type *
+                      </label>
+                      <select
+                        name="propertyType"
+                        value={propertyData.propertyType}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="">Select Property Type</option>
+                        {PROPERTY_TYPES.map((type) => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Survey Number
+                      </label>
+                      <input
+                        type="text"
+                        name="surveyNumber"
+                        value={propertyData.surveyNumber}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="e.g., Survey No. 123/4"
                       />
                     </div>
+                  </div>
+
+                  {/* Sub Division */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Sub Division (if any)
+                    </label>
+                    <input
+                      type="text"
+                      name="subDivision"
+                      value={propertyData.subDivision}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="e.g., Plot A, Block 1"
+                    />
                   </div>
 
                   {/* Area */}
@@ -381,6 +465,19 @@ export default function RegisterProperty() {
                       If you have uploaded property documents to IPFS, enter the hash here
                     </p>
                   </div>
+
+                  {/* Message Display */}
+                  {message && (
+                    <div className={`p-4 rounded-lg ${
+                      message.includes('✅') 
+                        ? 'bg-green-50 border border-green-200 text-green-800' 
+                        : message.includes('❌')
+                        ? 'bg-red-50 border border-red-200 text-red-800'
+                        : 'bg-blue-50 border border-blue-200 text-blue-800'
+                    }`}>
+                      <p className="font-semibold">{message}</p>
+                    </div>
+                  )}
 
                   {/* Submit Button */}
                   <div className="flex justify-between items-center pt-6">

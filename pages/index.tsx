@@ -119,11 +119,11 @@ export default function Home() {
         <main className="container mx-auto px-4 py-12">
           <div className="text-center mb-16">
             <h2 className="text-5xl font-bold text-gray-800 mb-4">
-              Tamper-Proof Land Registry
+              India Land Registry System 🇮🇳
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              A blockchain-driven property registration system to digitize land records, 
-              ensure transparent ownership history, and reduce corruption in land management.
+              A blockchain-driven property registration system for India, featuring state-wise district management, 
+              government verification portal, and comprehensive search capabilities across all Indian states and districts.
             </p>
           </div>
 
@@ -146,26 +146,26 @@ export default function Home() {
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
-              <div className="text-4xl mb-4">✅</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Verified Documents</h3>
+              <div className="text-4xl mb-4">🏛️</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">Government Verification</h3>
               <p className="text-gray-600">
-                Government verifiers can authenticate property documents before transfers are completed.
+                Separate government portal for officials to verify properties without wallet requirements.
               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
-              <div className="text-4xl mb-4">🔄</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Easy Transfers</h3>
+              <div className="text-4xl mb-4">�️</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">India-Wide Coverage</h3>
               <p className="text-gray-600">
-                Streamlined property transfer process with built-in approval workflows.
+                Complete coverage of all Indian states and districts with location-based search capabilities.
               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
-              <div className="text-4xl mb-4">🌐</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Public Access</h3>
+              <div className="text-4xl mb-4">�</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">ID Document Search</h3>
               <p className="text-gray-600">
-                Anyone can verify property ownership and access public records instantly.
+                Search properties by owner's Aadhaar, PAN, or Passport number for comprehensive verification.
               </p>
             </div>
 
@@ -215,9 +215,9 @@ export default function Home() {
                 <Link href="/search">
                   <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
                     <div className="text-3xl mb-3">🔍</div>
-                    <h3 className="text-lg font-bold mb-2">Search Property</h3>
+                    <h3 className="text-lg font-bold mb-2">Search Properties</h3>
                     <p className="text-sm text-orange-100">
-                      Look up any property by ID
+                      Search by ID, location, or owner details
                     </p>
                   </div>
                 </Link>
@@ -235,12 +235,12 @@ export default function Home() {
                   </div>
                 </Link>
 
-                <Link href="/admin">
+                <Link href="/government-portal">
                   <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
-                    <div className="text-3xl mb-3">🔐</div>
-                    <h3 className="text-lg font-bold mb-2">Admin Panel</h3>
+                    <div className="text-3xl mb-3">🏛️</div>
+                    <h3 className="text-lg font-bold mb-2">Government Portal</h3>
                     <p className="text-sm text-red-100">
-                      Government verifier dashboard (restricted access)
+                      Official portal for property verification & transfers
                     </p>
                   </div>
                 </Link>
