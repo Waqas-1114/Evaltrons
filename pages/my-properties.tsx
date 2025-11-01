@@ -57,7 +57,7 @@ export default function MyProperties() {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const accounts = await provider.listAccounts();
-        
+
         if (accounts.length > 0) {
           const signer = await provider.getSigner();
           const address = await signer.getAddress();
@@ -77,7 +77,7 @@ export default function MyProperties() {
         await provider.send('eth_requestAccounts', []);
         const signer = await provider.getSigner();
         const address = await signer.getAddress();
-        
+
         setAccount(address);
         setIsConnected(true);
       } catch (error) {
@@ -91,13 +91,13 @@ export default function MyProperties() {
 
   const loadOwnerDetails = async () => {
     if (!account) return;
-    
+
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
-      
+
       const ownerDetails = await contract.getOwnerDetails(account);
-      
+
       if (ownerDetails.name) {
         setOwner({
           ownerAddress: ownerDetails.ownerAddress,
@@ -114,25 +114,25 @@ export default function MyProperties() {
 
   const loadMyProperties = async () => {
     if (!account) return;
-    
+
     setLoading(true);
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
-      
+
       const propertyIds = await contract.getOwnerProperties(account);
-      
+
       // Get list of deleted properties from localStorage
       const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
-      
+
       const propertyPromises = propertyIds.map(async (id: bigint) => {
         const propertyId = Number(id);
-        
+
         // Skip if property is marked as deleted
         if (deletedProperties.includes(propertyId)) {
           return null;
         }
-        
+
         const details = await contract.getPropertyDetails(id);
         return {
           propertyId: propertyId,
@@ -149,7 +149,7 @@ export default function MyProperties() {
           lastTransferDate: Number(details.lastTransferDate)
         };
       });
-      
+
       const propertiesData = await Promise.all(propertyPromises);
       // Filter out null values (deleted properties)
       setProperties(propertiesData.filter(p => p !== null) as Property[]);
@@ -167,23 +167,23 @@ export default function MyProperties() {
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
-      
+
       const tx = await contract.createTransferRequest(
         selectedProperty.propertyId,
         transferData.toAddress,
         transferData.documentHash || 'QmTransferDoc'
       );
-      
+
       console.log('Transfer request sent:', tx.hash);
       alert('Transfer request created! Waiting for government approval...');
-      
+
       await tx.wait();
       alert('Transfer request created successfully!');
-      
+
       setShowTransferModal(false);
       setSelectedProperty(null);
       setTransferData({ toAddress: '', documentHash: '' });
-      
+
     } catch (error: any) {
       console.error('Error creating transfer request:', error);
       alert('Failed to create transfer request: ' + (error.message || 'Unknown error'));
@@ -241,7 +241,7 @@ export default function MyProperties() {
                   <p className="text-xs text-gray-500">My Properties</p>
                 </div>
               </Link>
-              
+
               <div className="flex items-center space-x-4">
                 <div className="text-right">
                   <p className="text-xs text-gray-500">Connected Account</p>
@@ -277,11 +277,10 @@ export default function MyProperties() {
                   <p className="text-gray-600">Contact: {owner.contactInfo}</p>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                    owner.isVerified 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${owner.isVerified
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                    }`}>
                     {owner.isVerified ? '✅ Verified' : '⏳ Pending Verification'}
                   </span>
                 </div>
@@ -296,13 +295,22 @@ export default function MyProperties() {
                 <h2 className="text-2xl font-bold text-gray-800">My Properties</h2>
                 <p className="text-gray-600">Properties registered under your account</p>
               </div>
-              <Link
-                href="/register-property"
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold flex items-center space-x-2"
-              >
-                <span>➕</span>
-                <span>Add Property</span>
-              </Link>
+              <div className="flex items-center space-x-3">
+                <Link
+                  href="/request-transfer"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold flex items-center space-x-2"
+                >
+                  <span>🔄</span>
+                  <span>Request Transfer</span>
+                </Link>
+                <Link
+                  href="/register-property"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold flex items-center space-x-2"
+                >
+                  <span>➕</span>
+                  <span>Add Property</span>
+                </Link>
+              </div>
             </div>
 
             {loading ? (
@@ -339,11 +347,10 @@ export default function MyProperties() {
                         </p>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                          property.isVerified 
-                            ? 'bg-green-100 text-green-800' 
+                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${property.isVerified
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-yellow-100 text-yellow-800'
-                        }`}>
+                          }`}>
                           {property.isVerified ? '✅ Verified' : '⏳ Pending Verification'}
                         </span>
                       </div>

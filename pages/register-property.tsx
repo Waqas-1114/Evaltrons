@@ -18,7 +18,7 @@ interface Owner {
 
 const PROPERTY_TYPES = [
   'Residential',
-  'Commercial', 
+  'Commercial',
   'Agricultural',
   'Industrial'
 ];
@@ -46,13 +46,13 @@ export default function RegisterProperty() {
 
   const [states] = useState(getAllStates());
   const [districts, setDistricts] = useState<string[]>([]);
-  
+
   // File uploads state
   const [propertyDocument, setPropertyDocument] = useState<File | null>(null);
   const [propertyPhotos, setPropertyPhotos] = useState<File[]>([]);
   const [documentPreview, setDocumentPreview] = useState<string>('');
   const [photosPreviews, setPhotosPreviews] = useState<string[]>([]);
-  
+
   // Verification dialog state
   const [showVerificationDialog, setShowVerificationDialog] = useState(false);
   const [registeredPropertyId, setRegisteredPropertyId] = useState<string>('');
@@ -81,7 +81,7 @@ export default function RegisterProperty() {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const accounts = await provider.listAccounts();
-        
+
         if (accounts.length > 0) {
           const signer = await provider.getSigner();
           const address = await signer.getAddress();
@@ -101,7 +101,7 @@ export default function RegisterProperty() {
         await provider.send('eth_requestAccounts', []);
         const signer = await provider.getSigner();
         const address = await signer.getAddress();
-        
+
         setAccount(address);
         setIsConnected(true);
       } catch (error) {
@@ -115,14 +115,14 @@ export default function RegisterProperty() {
 
   const loadOwnerDetails = async () => {
     if (!account) return;
-    
+
     setLoading(true);
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
-      
+
       const ownerDetails = await contract.getOwnerDetails(account);
-      
+
       if (ownerDetails.name) {
         setOwner({
           ownerAddress: ownerDetails.ownerAddress,
@@ -158,15 +158,15 @@ export default function RegisterProperty() {
         alert('Please upload a PDF or image file (JPG, PNG)');
         return;
       }
-      
+
       // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         alert('File size must be less than 5MB');
         return;
       }
-      
+
       setPropertyDocument(file);
-      
+
       // Create preview for images
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
@@ -182,32 +182,32 @@ export default function RegisterProperty() {
 
   const handlePhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    
+
     // Validate total photos (max 5)
     if (propertyPhotos.length + files.length > 5) {
       alert('You can upload maximum 5 photos');
       return;
     }
-    
+
     // Validate each file
     const validFiles: File[] = [];
     const newPreviews: string[] = [];
-    
+
     files.forEach(file => {
       // Validate file type (images only)
       if (!file.type.startsWith('image/')) {
         alert(`${file.name} is not an image file`);
         return;
       }
-      
+
       // Validate file size (max 3MB per photo)
       if (file.size > 3 * 1024 * 1024) {
         alert(`${file.name} is too large. Max size is 3MB`);
         return;
       }
-      
+
       validFiles.push(file);
-      
+
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -218,7 +218,7 @@ export default function RegisterProperty() {
       };
       reader.readAsDataURL(file);
     });
-    
+
     setPropertyPhotos(prev => [...prev, ...validFiles]);
   };
 
@@ -234,14 +234,19 @@ export default function RegisterProperty() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!owner) {
       alert('Please register as an owner first');
       return;
     }
 
     if (!propertyData.address || !propertyData.district || !propertyData.state || !propertyData.area || !propertyData.propertyType) {
-      alert('Please fill in all required fields');
+      setMessage('❌ Please fill in all required fields');
+      return;
+    }
+
+    if (!propertyDocument) {
+      setMessage('❌ Please upload a property document');
       return;
     }
 
@@ -252,26 +257,39 @@ export default function RegisterProperty() {
       // For now, we'll create a simple hash
       const timestamp = Date.now();
       documentHash = `Qm${timestamp}${propertyDocument?.name || 'docs'}`;
-      
-      // Store files in localStorage for demo (in production, use IPFS/decentralized storage)
-      const propertyFiles = {
-        document: documentPreview, // base64 encoded document
-        photos: photosPreviews, // array of base64 encoded photos
-        documentName: propertyDocument?.name || '',
+
+      // Store files in localStorage (convert to base64)
+      // In production, upload to IPFS and use the IPFS hash
+      const propertyFiles: any = {
         timestamp: timestamp
       };
-      
-      // We'll store by documentHash so government portal can retrieve it
-      localStorage.setItem(`property_files_${documentHash}`, JSON.stringify(propertyFiles));
+
+      // Store document
+      if (propertyDocument && documentPreview) {
+        propertyFiles.document = documentPreview;
+      }
+
+      // Store photos
+      if (propertyPhotos.length > 0) {
+        propertyFiles.photos = photosPreviews;
+      }
+
+      // Save to localStorage
+      try {
+        localStorage.setItem(`property_files_${documentHash}`, JSON.stringify(propertyFiles));
+      } catch (error) {
+        console.error('Error saving files to localStorage:', error);
+        setMessage('⚠️ Warning: Could not save files locally, but property will still be registered');
+      }
     }
 
     setRegistering(true);
     setMessage('📤 Uploading documents and registering property...');
-    
+
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
-      
+
       const tx = await contract.registerProperty(
         propertyData.address,
         propertyData.district,
@@ -282,25 +300,67 @@ export default function RegisterProperty() {
         propertyData.subDivision || '',
         documentHash
       );
-      
+
       console.log('Transaction sent:', tx.hash);
       setMessage('⏳ Property registration transaction sent! Waiting for confirmation...');
-      
+
       const receipt = await tx.wait();
       console.log('Transaction receipt:', receipt);
-      
-      // Extract property ID from transaction logs
-      const propertyId = receipt.logs[0]?.topics[1] || '0';
+
+      // Extract property ID from transaction logs or events
+      let propertyId = '0';
+
+      try {
+        // Try to parse events from the receipt
+        if (receipt && receipt.logs && receipt.logs.length > 0) {
+          // Get the property ID from the first log topic (event emission)
+          const log = receipt.logs[0];
+          if (log && log.topics && log.topics.length > 1) {
+            // Convert hex to decimal
+            propertyId = parseInt(log.topics[1], 16).toString();
+          }
+        }
+
+        // Fallback: get total properties from contract
+        if (propertyId === '0') {
+          const totalProperties = await contract.getTotalProperties();
+          propertyId = totalProperties.toString();
+        }
+      } catch (error) {
+        console.error('Error extracting property ID:', error);
+        // Use timestamp as fallback
+        propertyId = Date.now().toString();
+      }
+
       setRegisteredPropertyId(propertyId);
-      
+
       setMessage('✅ Property registered successfully!');
-      
+
       // Show verification dialog
       setShowVerificationDialog(true);
-      
+
     } catch (error: any) {
       console.error('Error registering property:', error);
-      setMessage('❌ Failed to register property: ' + (error.message || 'Unknown error'));
+
+      let errorMessage = 'Failed to register property';
+
+      if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.code === 'INSUFFICIENT_FUNDS' || error.message?.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds in wallet to complete transaction';
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message) {
+        // Extract meaningful error from message
+        const match = error.message.match(/reason="([^"]+)"/);
+        if (match) {
+          errorMessage = match[1];
+        } else {
+          errorMessage = error.message.substring(0, 100);
+        }
+      }
+
+      setMessage('❌ ' + errorMessage);
     } finally {
       setRegistering(false);
     }
@@ -309,33 +369,52 @@ export default function RegisterProperty() {
   const handleSendForVerification = async () => {
     setSendingVerification(true);
     setMessage('📝 Sending property for verification...');
-    
+
     try {
       const signer = await getSigner();
       const contract = getContract(signer);
-      
+
       // Get verification fee from contract
       const verificationFee = await contract.VERIFICATION_FEE();
-      
+
       const tx = await contract.requestPropertyVerification(
         registeredPropertyId,
         { value: verificationFee }
       );
-      
+
       console.log('Verification request sent:', tx.hash);
       setMessage('⏳ Verification request transaction sent! Waiting for confirmation...');
-      
+
       await tx.wait();
       setMessage('✅ Property sent for verification! Redirecting to dashboard...');
-      
+
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push('/dashboard');
       }, 2000);
-      
+
     } catch (error: any) {
       console.error('Error sending for verification:', error);
-      setMessage('❌ Failed to send for verification: ' + (error.message || 'Unknown error'));
+
+      let errorMessage = 'Failed to send for verification';
+
+      if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.code === 'INSUFFICIENT_FUNDS' || error.message?.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds in wallet. Need at least 0.001 ETH for verification fee plus gas';
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message) {
+        // Extract meaningful error from message
+        const match = error.message.match(/reason="([^"]+)"/);
+        if (match) {
+          errorMessage = match[1];
+        } else {
+          errorMessage = error.message.substring(0, 100);
+        }
+      }
+
+      setMessage('❌ ' + errorMessage);
     } finally {
       setSendingVerification(false);
     }
@@ -390,7 +469,7 @@ export default function RegisterProperty() {
                   <p className="text-xs text-gray-500">Register Property</p>
                 </div>
               </Link>
-              
+
               <div className="flex items-center space-x-4">
                 <div className="text-right">
                   <p className="text-xs text-gray-500">Connected Account</p>
@@ -429,7 +508,7 @@ export default function RegisterProperty() {
               <p className="text-gray-600 mb-6">
                 You need to register as an owner before you can register properties
               </p>
-              <Link 
+              <Link
                 href="/register-owner"
                 className="inline-block px-8 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-semibold"
               >
@@ -447,11 +526,10 @@ export default function RegisterProperty() {
                     <p className="text-gray-600">Location: {owner.homeDistrict}, {owner.homeState}</p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      owner.isVerified 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${owner.isVerified
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                      }`}>
                       {owner.isVerified ? '✅ Verified' : '⏳ Pending Verification'}
                     </span>
                   </div>
@@ -675,14 +753,14 @@ export default function RegisterProperty() {
                           </p>
                         </div>
                       )}
-                      
+
                       {propertyPhotos.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                           {photosPreviews.map((preview, index) => (
                             <div key={index} className="relative group">
-                              <img 
-                                src={preview} 
-                                alt={`Property photo ${index + 1}`} 
+                              <img
+                                src={preview}
+                                alt={`Property photo ${index + 1}`}
                                 className="w-full h-32 object-cover rounded-lg"
                               />
                               <button
@@ -706,13 +784,12 @@ export default function RegisterProperty() {
 
                   {/* Message Display */}
                   {message && (
-                    <div className={`p-4 rounded-lg ${
-                      message.includes('✅') 
-                        ? 'bg-green-50 border border-green-200 text-green-800' 
-                        : message.includes('❌')
+                    <div className={`p-4 rounded-lg ${message.includes('✅')
+                      ? 'bg-green-50 border border-green-200 text-green-800'
+                      : message.includes('❌')
                         ? 'bg-red-50 border border-red-200 text-red-800'
                         : 'bg-blue-50 border border-blue-200 text-blue-800'
-                    }`}>
+                      }`}>
                       <p className="font-semibold">{message}</p>
                     </div>
                   )}
@@ -725,7 +802,7 @@ export default function RegisterProperty() {
                     >
                       Cancel
                     </Link>
-                    
+
                     <button
                       type="submit"
                       disabled={registering}
@@ -806,13 +883,12 @@ export default function RegisterProperty() {
               </div>
 
               {message && message.includes('verification') && (
-                <div className={`p-3 rounded-lg mb-4 text-sm ${
-                  message.includes('✅') 
-                    ? 'bg-green-50 text-green-800' 
-                    : message.includes('❌')
+                <div className={`p-3 rounded-lg mb-4 text-sm ${message.includes('✅')
+                  ? 'bg-green-50 text-green-800'
+                  : message.includes('❌')
                     ? 'bg-red-50 text-red-800'
                     : 'bg-blue-50 text-blue-800'
-                }`}>
+                  }`}>
                   {message}
                 </div>
               )}

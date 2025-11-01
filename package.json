@@ -11,6 +11,7 @@
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.ts --network ganache",
     "deploy:localhost": "hardhat run scripts/deploy.ts --network localhost",
+    "register-officers": "hardhat run scripts/register-officers.ts --network ganache",
     "node": "hardhat node",
     "clean": "hardhat clean",
     "typechain": "hardhat typechain"

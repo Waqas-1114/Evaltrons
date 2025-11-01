@@ -10,7 +10,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * @notice This contract manages tamper-proof land ownership records and transfers across Indian states and districts
  */
 contract LandRegistry is Ownable, ReentrancyGuard {
-    
     // Property structure with India-specific fields
     struct Property {
         uint256 propertyId;
@@ -30,7 +29,7 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         uint256 lastTransferDate;
         uint256 verificationFee; // Fee paid for verification
     }
-    
+
     // Owner structure
     struct Owner {
         address ownerAddress;
@@ -41,7 +40,7 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string homeState;
         string homeDistrict;
     }
-    
+
     // Government officer structure
     struct GovernmentOfficer {
         string employeeId;
@@ -52,7 +51,7 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         bool isActive;
         uint256 registrationDate;
     }
-    
+
     // Transfer request structure
     struct TransferRequest {
         uint256 requestId;
@@ -65,7 +64,7 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string transferDocumentHash;
         uint256 transferFee;
     }
-    
+
     // Verification request structure
     struct VerificationRequest {
         uint256 verificationId;
@@ -78,16 +77,16 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string officerEmployeeId;
         string verificationNotes;
     }
-    
+
     // State variables
     uint256 private propertyCounter;
     uint256 private transferRequestCounter;
     uint256 private verificationRequestCounter;
-    
+
     // Verification fee (in wei)
     uint256 public constant VERIFICATION_FEE = 0.001 ether;
     uint256 public constant TRANSFER_FEE = 0.002 ether;
-    
+
     // Mappings
     mapping(uint256 => Property) public properties;
     mapping(address => Owner) public owners;
@@ -97,14 +96,14 @@ contract LandRegistry is Ownable, ReentrancyGuard {
     mapping(uint256 => uint256[]) public propertyTransferHistory;
     mapping(string => uint256[]) public stateProperties; // Properties by state
     mapping(string => mapping(string => uint256[])) public districtProperties; // Properties by district
-    
+
     // Government officers - mapped by employee ID instead of wallet address
     mapping(string => GovernmentOfficer) public governmentOfficers;
     mapping(string => bool) public activeOfficers;
-    
+
     // Search mappings for efficient querying
     mapping(string => uint256[]) public ownersByIdDocument; // Properties by owner ID document
-    
+
     // Events
     event PropertyRegistered(
         uint256 indexed propertyId,
@@ -114,7 +113,7 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string district,
         uint256 registrationDate
     );
-    
+
     event VerificationRequested(
         uint256 indexed verificationId,
         uint256 indexed propertyId,
@@ -122,14 +121,14 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         uint256 feePaid,
         uint256 requestDate
     );
-    
+
     event PropertyVerified(
         uint256 indexed propertyId,
         uint256 indexed verificationId,
         string officerEmployeeId,
         uint256 verificationDate
     );
-    
+
     event TransferRequestCreated(
         uint256 indexed requestId,
         uint256 indexed propertyId,
@@ -137,20 +136,20 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         address toOwner,
         uint256 requestDate
     );
-    
+
     event TransferRequestApproved(
         uint256 indexed requestId,
         string officerEmployeeId,
         uint256 approvalDate
     );
-    
+
     event PropertyTransferred(
         uint256 indexed propertyId,
         address indexed fromOwner,
         address indexed toOwner,
         uint256 transferDate
     );
-    
+
     event OwnerRegistered(
         address indexed ownerAddress,
         string name,
@@ -158,7 +157,7 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string district,
         uint256 registrationDate
     );
-    
+
     event GovernmentOfficerRegistered(
         string indexed employeeId,
         string name,
@@ -167,35 +166,44 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string district,
         uint256 registrationDate
     );
-    
+
     event GovernmentOfficerStatusChanged(
         string indexed employeeId,
         bool isActive,
         uint256 changeDate
     );
-    
+
     // Modifiers
     modifier onlyActiveOfficer(string memory _employeeId) {
-        require(activeOfficers[_employeeId], "Not an active government officer");
+        require(
+            activeOfficers[_employeeId],
+            "Not an active government officer"
+        );
         _;
     }
-    
+
     modifier onlyPropertyOwner(uint256 _propertyId) {
-        require(properties[_propertyId].currentOwner == msg.sender, "Not the property owner");
+        require(
+            properties[_propertyId].currentOwner == msg.sender,
+            "Not the property owner"
+        );
         _;
     }
-    
+
     modifier propertyExists(uint256 _propertyId) {
-        require(properties[_propertyId].isRegistered, "Property does not exist");
+        require(
+            properties[_propertyId].isRegistered,
+            "Property does not exist"
+        );
         _;
     }
-    
+
     constructor() Ownable(msg.sender) {
         propertyCounter = 0;
         transferRequestCounter = 0;
         verificationRequestCounter = 0;
     }
-    
+
     /**
      * @dev Register a new owner
      */
@@ -206,8 +214,11 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string memory _homeState,
         string memory _homeDistrict
     ) external {
-        require(bytes(owners[msg.sender].name).length == 0, "Owner already registered");
-        
+        require(
+            bytes(owners[msg.sender].name).length == 0,
+            "Owner already registered"
+        );
+
         owners[msg.sender] = Owner({
             ownerAddress: msg.sender,
             name: _name,
@@ -217,13 +228,19 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             homeState: _homeState,
             homeDistrict: _homeDistrict
         });
-        
+
         // Add to ID document mapping for search functionality
         ownersByIdDocument[_idDocument].push(uint256(uint160(msg.sender)));
-        
-        emit OwnerRegistered(msg.sender, _name, _homeState, _homeDistrict, block.timestamp);
+
+        emit OwnerRegistered(
+            msg.sender,
+            _name,
+            _homeState,
+            _homeDistrict,
+            block.timestamp
+        );
     }
-    
+
     /**
      * @dev Register a government officer (only by contract owner)
      */
@@ -234,8 +251,11 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string memory _state,
         string memory _district
     ) external onlyOwner {
-        require(bytes(governmentOfficers[_employeeId].employeeId).length == 0, "Officer already registered");
-        
+        require(
+            bytes(governmentOfficers[_employeeId].employeeId).length == 0,
+            "Officer already registered"
+        );
+
         governmentOfficers[_employeeId] = GovernmentOfficer({
             employeeId: _employeeId,
             name: _name,
@@ -245,24 +265,41 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             isActive: true,
             registrationDate: block.timestamp
         });
-        
+
         activeOfficers[_employeeId] = true;
-        
-        emit GovernmentOfficerRegistered(_employeeId, _name, _department, _state, _district, block.timestamp);
+
+        emit GovernmentOfficerRegistered(
+            _employeeId,
+            _name,
+            _department,
+            _state,
+            _district,
+            block.timestamp
+        );
     }
-    
+
     /**
      * @dev Activate/Deactivate government officer (only by contract owner)
      */
-    function setOfficerStatus(string memory _employeeId, bool _isActive) external onlyOwner {
-        require(bytes(governmentOfficers[_employeeId].employeeId).length > 0, "Officer not registered");
-        
+    function setOfficerStatus(
+        string memory _employeeId,
+        bool _isActive
+    ) external onlyOwner {
+        require(
+            bytes(governmentOfficers[_employeeId].employeeId).length > 0,
+            "Officer not registered"
+        );
+
         governmentOfficers[_employeeId].isActive = _isActive;
         activeOfficers[_employeeId] = _isActive;
-        
-        emit GovernmentOfficerStatusChanged(_employeeId, _isActive, block.timestamp);
+
+        emit GovernmentOfficerStatusChanged(
+            _employeeId,
+            _isActive,
+            block.timestamp
+        );
     }
-    
+
     /**
      * @dev Register a new property
      */
@@ -276,11 +313,14 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         string memory _subDivision,
         string memory _documentHash
     ) external returns (uint256) {
-        require(bytes(owners[msg.sender].name).length > 0, "Owner must be registered first");
-        
+        require(
+            bytes(owners[msg.sender].name).length > 0,
+            "Owner must be registered first"
+        );
+
         propertyCounter++;
         uint256 newPropertyId = propertyCounter;
-        
+
         properties[newPropertyId] = Property({
             propertyId: newPropertyId,
             propertyAddress: _propertyAddress,
@@ -299,32 +339,44 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             lastTransferDate: block.timestamp,
             verificationFee: 0
         });
-        
+
         ownerProperties[msg.sender].push(newPropertyId);
         stateProperties[_state].push(newPropertyId);
         districtProperties[_state][_district].push(newPropertyId);
-        
-        emit PropertyRegistered(newPropertyId, msg.sender, _propertyAddress, _state, _district, block.timestamp);
-        
+
+        emit PropertyRegistered(
+            newPropertyId,
+            msg.sender,
+            _propertyAddress,
+            _state,
+            _district,
+            block.timestamp
+        );
+
         return newPropertyId;
     }
-    
+
     /**
      * @dev Request property verification (owner pays the fee)
      */
-    function requestPropertyVerification(uint256 _propertyId) 
-        external 
+    function requestPropertyVerification(
+        uint256 _propertyId
+    )
+        external
         payable
-        onlyPropertyOwner(_propertyId) 
-        propertyExists(_propertyId) 
+        onlyPropertyOwner(_propertyId)
+        propertyExists(_propertyId)
         returns (uint256)
     {
-        require(!properties[_propertyId].isVerified, "Property already verified");
+        require(
+            !properties[_propertyId].isVerified,
+            "Property already verified"
+        );
         require(msg.value >= VERIFICATION_FEE, "Insufficient verification fee");
-        
+
         verificationRequestCounter++;
         uint256 newVerificationId = verificationRequestCounter;
-        
+
         verificationRequests[newVerificationId] = VerificationRequest({
             verificationId: newVerificationId,
             propertyId: _propertyId,
@@ -336,14 +388,20 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             officerEmployeeId: "",
             verificationNotes: ""
         });
-        
+
         properties[_propertyId].verificationFee = msg.value;
-        
-        emit VerificationRequested(newVerificationId, _propertyId, msg.sender, msg.value, block.timestamp);
-        
+
+        emit VerificationRequested(
+            newVerificationId,
+            _propertyId,
+            msg.sender,
+            msg.value,
+            block.timestamp
+        );
+
         return newVerificationId;
     }
-    
+
     /**
      * @dev Verify a property (only by government officers)
      */
@@ -353,25 +411,35 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         bool _approve,
         string memory _notes
     ) external onlyActiveOfficer(_employeeId) {
-        VerificationRequest storage request = verificationRequests[_verificationId];
+        VerificationRequest storage request = verificationRequests[
+            _verificationId
+        ];
         require(request.isPending, "Verification request not pending");
-        
+
         uint256 propertyId = request.propertyId;
         Property storage property = properties[propertyId];
-        
+
         request.isPending = false;
         request.isApproved = _approve;
         request.officerEmployeeId = _employeeId;
         request.verificationNotes = _notes;
-        
+
         if (_approve) {
             property.isVerified = true;
             property.isTransferable = true;
+
+            // Also verify the property owner when property is verified
+            owners[property.currentOwner].isVerified = true;
         }
-        
-        emit PropertyVerified(propertyId, _verificationId, _employeeId, block.timestamp);
+
+        emit PropertyVerified(
+            propertyId,
+            _verificationId,
+            _employeeId,
+            block.timestamp
+        );
     }
-    
+
     /**
      * @dev Create a transfer request (only for verified and transferable properties)
      */
@@ -379,16 +447,29 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         uint256 _propertyId,
         address _toOwner,
         string memory _transferDocumentHash
-    ) external payable onlyPropertyOwner(_propertyId) propertyExists(_propertyId) returns (uint256) {
-        require(properties[_propertyId].isVerified, "Property must be verified first");
-        require(properties[_propertyId].isTransferable, "Property is not transferable");
-        require(bytes(owners[_toOwner].name).length > 0, "Recipient must be registered");
+    )
+        external
+        payable
+        onlyPropertyOwner(_propertyId)
+        propertyExists(_propertyId)
+        returns (uint256)
+    {
+        require(
+            properties[_propertyId].isVerified,
+            "Property must be verified first"
+        );
+        require(
+            properties[_propertyId].isTransferable,
+            "Property is not transferable"
+        );
+        // Note: Recipient doesn't need to be registered - they can accept transfer when they log in
         require(_toOwner != msg.sender, "Cannot transfer to yourself");
+        require(_toOwner != address(0), "Invalid recipient address");
         require(msg.value >= TRANSFER_FEE, "Insufficient transfer fee");
-        
+
         transferRequestCounter++;
         uint256 newRequestId = transferRequestCounter;
-        
+
         transferRequests[newRequestId] = TransferRequest({
             requestId: newRequestId,
             propertyId: _propertyId,
@@ -400,29 +481,43 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             transferDocumentHash: _transferDocumentHash,
             transferFee: msg.value
         });
-        
-        emit TransferRequestCreated(newRequestId, _propertyId, msg.sender, _toOwner, block.timestamp);
-        
+
+        emit TransferRequestCreated(
+            newRequestId,
+            _propertyId,
+            msg.sender,
+            _toOwner,
+            block.timestamp
+        );
+
         return newRequestId;
     }
-    
+
     /**
      * @dev Approve a transfer request (only by government officers)
+     * Transfer fee is sent to the approving government officer
      */
-    function approveTransferRequest(uint256 _requestId, string memory _employeeId) 
-        external 
-        onlyActiveOfficer(_employeeId)
-        nonReentrant 
-    {
+    function approveTransferRequest(
+        uint256 _requestId,
+        string memory _employeeId
+    ) external onlyActiveOfficer(_employeeId) nonReentrant {
         TransferRequest storage request = transferRequests[_requestId];
         require(!request.isApproved, "Request already approved");
         require(!request.isCompleted, "Request already completed");
-        
+
         request.isApproved = true;
-        
+
+        // Transfer the fee to the government officer (msg.sender)
+        if (request.transferFee > 0) {
+            (bool success, ) = payable(msg.sender).call{
+                value: request.transferFee
+            }("");
+            require(success, "Transfer fee payment failed");
+        }
+
         emit TransferRequestApproved(_requestId, _employeeId, block.timestamp);
     }
-    
+
     /**
      * @dev Complete the transfer (execute after approval)
      */
@@ -434,29 +529,34 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             msg.sender == request.fromOwner || msg.sender == request.toOwner,
             "Not authorized to complete transfer"
         );
-        
+
         uint256 propertyId = request.propertyId;
         Property storage property = properties[propertyId];
-        
+
         // Remove from old owner's properties
         _removePropertyFromOwner(request.fromOwner, propertyId);
-        
+
         // Update property ownership
         property.currentOwner = request.toOwner;
         property.lastTransferDate = block.timestamp;
-        
+
         // Add to new owner's properties
         ownerProperties[request.toOwner].push(propertyId);
-        
+
         // Add to transfer history
         propertyTransferHistory[propertyId].push(_requestId);
-        
+
         // Mark request as completed
         request.isCompleted = true;
-        
-        emit PropertyTransferred(propertyId, request.fromOwner, request.toOwner, block.timestamp);
+
+        emit PropertyTransferred(
+            propertyId,
+            request.fromOwner,
+            request.toOwner,
+            block.timestamp
+        );
     }
-    
+
     /**
      * @dev Search properties by state and district
      */
@@ -470,178 +570,190 @@ contract LandRegistry is Ownable, ReentrancyGuard {
             return stateProperties[_state];
         }
     }
-    
+
     /**
      * @dev Search properties by owner ID document
      */
-    function searchPropertiesByOwnerIdDocument(string memory _idDocument) 
-        external 
-        view 
-        returns (uint256[] memory ownerAddresses, uint256[][] memory properties) 
+    function searchPropertiesByOwnerIdDocument(
+        string memory _idDocument
+    )
+        external
+        view
+        returns (uint256[] memory ownerAddresses, uint256[][] memory properties)
     {
         uint256[] memory addresses = ownersByIdDocument[_idDocument];
         properties = new uint256[][](addresses.length);
-        
+
         for (uint256 i = 0; i < addresses.length; i++) {
             address ownerAddr = address(uint160(addresses[i]));
             properties[i] = ownerProperties[ownerAddr];
         }
-        
+
         return (addresses, properties);
     }
-    
+
     /**
      * @dev Get all verification requests (for government portal)
      */
-    function getPendingVerificationRequests() 
-        external 
-        view 
-        returns (uint256[] memory) 
+    function getPendingVerificationRequests()
+        external
+        view
+        returns (uint256[] memory)
     {
         uint256[] memory pending = new uint256[](verificationRequestCounter);
         uint256 count = 0;
-        
+
         for (uint256 i = 1; i <= verificationRequestCounter; i++) {
             if (verificationRequests[i].isPending) {
                 pending[count] = i;
                 count++;
             }
         }
-        
+
         // Resize array to actual count
         uint256[] memory result = new uint256[](count);
         for (uint256 i = 0; i < count; i++) {
             result[i] = pending[i];
         }
-        
+
         return result;
     }
-    
+
     /**
      * @dev Get all pending transfer requests (for government portal)
      */
-    function getPendingTransferRequests() 
-        external 
-        view 
-        returns (uint256[] memory) 
+    function getPendingTransferRequests()
+        external
+        view
+        returns (uint256[] memory)
     {
         uint256[] memory pending = new uint256[](transferRequestCounter);
         uint256 count = 0;
-        
+
         for (uint256 i = 1; i <= transferRequestCounter; i++) {
-            if (!transferRequests[i].isApproved && !transferRequests[i].isCompleted) {
+            if (
+                !transferRequests[i].isApproved &&
+                !transferRequests[i].isCompleted
+            ) {
                 pending[count] = i;
                 count++;
             }
         }
-        
+
         // Resize array to actual count
         uint256[] memory result = new uint256[](count);
         for (uint256 i = 0; i < count; i++) {
             result[i] = pending[i];
         }
-        
+
         return result;
     }
-    
+
     /**
      * @dev Update property document hash
      */
-    function updatePropertyDocument(uint256 _propertyId, string memory _newDocumentHash)
-        external
-        onlyPropertyOwner(_propertyId)
-        propertyExists(_propertyId)
-    {
+    function updatePropertyDocument(
+        uint256 _propertyId,
+        string memory _newDocumentHash
+    ) external onlyPropertyOwner(_propertyId) propertyExists(_propertyId) {
         properties[_propertyId].documentHash = _newDocumentHash;
     }
-    
+
     /**
      * @dev Get all properties owned by an address
      */
-    function getOwnerProperties(address _owner) external view returns (uint256[] memory) {
+    function getOwnerProperties(
+        address _owner
+    ) external view returns (uint256[] memory) {
         return ownerProperties[_owner];
     }
-    
+
     /**
      * @dev Get property transfer history
      */
-    function getPropertyTransferHistory(uint256 _propertyId) 
-        external 
-        view 
-        propertyExists(_propertyId) 
-        returns (uint256[] memory) 
-    {
+    function getPropertyTransferHistory(
+        uint256 _propertyId
+    ) external view propertyExists(_propertyId) returns (uint256[] memory) {
         return propertyTransferHistory[_propertyId];
     }
-    
+
     /**
      * @dev Get property details
      */
-    function getPropertyDetails(uint256 _propertyId) 
-        external 
-        view 
-        propertyExists(_propertyId) 
-        returns (Property memory) 
-    {
+    function getPropertyDetails(
+        uint256 _propertyId
+    ) external view propertyExists(_propertyId) returns (Property memory) {
         return properties[_propertyId];
     }
-    
+
     /**
      * @dev Get owner details
      */
-    function getOwnerDetails(address _ownerAddress) external view returns (Owner memory) {
+    function getOwnerDetails(
+        address _ownerAddress
+    ) external view returns (Owner memory) {
         return owners[_ownerAddress];
     }
-    
+
     /**
      * @dev Get transfer request details
      */
-    function getTransferRequestDetails(uint256 _requestId) external view returns (TransferRequest memory) {
+    function getTransferRequestDetails(
+        uint256 _requestId
+    ) external view returns (TransferRequest memory) {
         return transferRequests[_requestId];
     }
-    
+
     /**
      * @dev Get verification request details
      */
-    function getVerificationRequestDetails(uint256 _verificationId) external view returns (VerificationRequest memory) {
+    function getVerificationRequestDetails(
+        uint256 _verificationId
+    ) external view returns (VerificationRequest memory) {
         return verificationRequests[_verificationId];
     }
-    
+
     /**
      * @dev Get government officer details
      */
-    function getGovernmentOfficerDetails(string memory _employeeId) external view returns (GovernmentOfficer memory) {
+    function getGovernmentOfficerDetails(
+        string memory _employeeId
+    ) external view returns (GovernmentOfficer memory) {
         return governmentOfficers[_employeeId];
     }
-    
+
     /**
      * @dev Check if property is transferable
      */
-    function isPropertyTransferable(uint256 _propertyId) external view returns (bool) {
-        return properties[_propertyId].isVerified && properties[_propertyId].isTransferable;
+    function isPropertyTransferable(
+        uint256 _propertyId
+    ) external view returns (bool) {
+        return
+            properties[_propertyId].isVerified &&
+            properties[_propertyId].isTransferable;
     }
-    
+
     /**
      * @dev Get total number of registered properties
      */
     function getTotalProperties() external view returns (uint256) {
         return propertyCounter;
     }
-    
+
     /**
      * @dev Get total number of transfer requests
      */
     function getTotalTransferRequests() external view returns (uint256) {
         return transferRequestCounter;
     }
-    
+
     /**
      * @dev Get total number of verification requests
      */
     function getTotalVerificationRequests() external view returns (uint256) {
         return verificationRequestCounter;
     }
-    
+
     /**
      * @dev Withdraw accumulated fees (only contract owner)
      */
@@ -650,11 +762,14 @@ contract LandRegistry is Ownable, ReentrancyGuard {
         require(balance > 0, "No fees to withdraw");
         payable(owner()).transfer(balance);
     }
-    
+
     /**
      * @dev Internal function to remove property from owner's list
      */
-    function _removePropertyFromOwner(address _owner, uint256 _propertyId) private {
+    function _removePropertyFromOwner(
+        address _owner,
+        uint256 _propertyId
+    ) private {
         uint256[] storage properties = ownerProperties[_owner];
         for (uint256 i = 0; i < properties.length; i++) {
             if (properties[i] == _propertyId) {

@@ -17,13 +17,13 @@ export default function Home() {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const accounts = await provider.listAccounts();
-        
+
         if (accounts.length > 0) {
           const signer = await provider.getSigner();
           const address = await signer.getAddress();
           setAccount(address);
           setIsConnected(true);
-          
+
           const network = await provider.getNetwork();
           setChainId(network.chainId.toString());
         }
@@ -40,10 +40,10 @@ export default function Home() {
         await provider.send('eth_requestAccounts', []);
         const signer = await provider.getSigner();
         const address = await signer.getAddress();
-        
+
         setAccount(address);
         setIsConnected(true);
-        
+
         const network = await provider.getNetwork();
         setChainId(network.chainId.toString());
       } catch (error) {
@@ -84,7 +84,7 @@ export default function Home() {
                   <p className="text-xs text-gray-500">Blockchain-Powered Property Management</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-4">
                 {isConnected ? (
                   <div className="flex items-center space-x-3">
@@ -122,7 +122,7 @@ export default function Home() {
               India Land Registry System 🇮🇳
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              A blockchain-driven property registration system for India, featuring state-wise district management, 
+              A blockchain-driven property registration system for India, featuring state-wise district management,
               government verification portal, and comprehensive search capabilities across all Indian states and districts.
             </p>
           </div>
@@ -202,6 +202,26 @@ export default function Home() {
                   </div>
                 </Link>
 
+                <Link href="/request-transfer">
+                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">🔄</div>
+                    <h3 className="text-lg font-bold mb-2">Request Transfer</h3>
+                    <p className="text-sm text-indigo-100">
+                      Transfer property to a new owner
+                    </p>
+                  </div>
+                </Link>
+
+                <Link href="/complete-transfer">
+                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                    <div className="text-3xl mb-3">✅</div>
+                    <h3 className="text-lg font-bold mb-2">Complete Transfer</h3>
+                    <p className="text-sm text-emerald-100">
+                      Finalize approved transfers
+                    </p>
+                  </div>
+                </Link>
+
                 <Link href="/my-properties">
                   <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
                     <div className="text-3xl mb-3">📋</div>
@@ -226,10 +246,10 @@ export default function Home() {
               {/* Additional Navigation */}
               <div className="grid md:grid-cols-2 gap-6">
                 <Link href="/dashboard">
-                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
+                  <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl shadow-lg p-6 text-white hover:shadow-xl transition cursor-pointer transform hover:scale-105">
                     <div className="text-3xl mb-3">📊</div>
                     <h3 className="text-lg font-bold mb-2">Analytics Dashboard</h3>
-                    <p className="text-sm text-indigo-100">
+                    <p className="text-sm text-teal-100">
                       View registry statistics and recent activity
                     </p>
                   </div>

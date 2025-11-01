@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { getContract, getProvider } from '../utils/contract';
+import { getContract, getProvider, getSigner } from '../utils/contract';
 
 interface VerificationRequest {
   verificationId: number;
@@ -68,60 +68,60 @@ export default function GovernmentPortal() {
   const [activeTab, setActiveTab] = useState<'verification' | 'transfer' | 'properties'>('verification');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  
+
   // Data states
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [transferRequests, setTransferRequests] = useState<TransferRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [propertyDetails, setPropertyDetails] = useState<Property | null>(null);
   const [ownerDetails, setOwnerDetails] = useState<Owner | null>(null);
-  
+
   // Properties view states
   const [allProperties, setAllProperties] = useState<Property[]>([]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Form states
   const [verificationNotes, setVerificationNotes] = useState('');
   const [approvalDecision, setApprovalDecision] = useState<boolean | null>(null);
-  
+
   // Document and photo viewing states
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showPhotosModal, setShowPhotosModal] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
-  
+
   // Mock property documents and photos (in real system, these would come from IPFS/blockchain)
   const [propertyDocumentUrl, setPropertyDocumentUrl] = useState<string>('');
   const [propertyPhotos, setPropertyPhotos] = useState<string[]>([]);
 
   // Mock government officers (in real system, this would be from a secure database)
   const GOVERNMENT_OFFICERS = {
-    'GVT001': { 
-      name: 'Rajesh Kumar', 
-      department: 'Land Revenue', 
-      state: 'Maharashtra', 
+    'GVT001': {
+      name: 'Rajesh Kumar',
+      department: 'Land Revenue',
+      state: 'Maharashtra',
       district: 'Mumbai',
       password: 'admin123'
     },
-    'GVT002': { 
-      name: 'Priya Sharma', 
-      department: 'Registration', 
-      state: 'Delhi', 
+    'GVT002': {
+      name: 'Priya Sharma',
+      department: 'Registration',
+      state: 'Delhi',
       district: 'Central Delhi',
       password: 'admin123'
     },
-    'GVT003': { 
-      name: 'Amit Singh', 
-      department: 'Revenue', 
-      state: 'Uttar Pradesh', 
+    'GVT003': {
+      name: 'Amit Singh',
+      department: 'Revenue',
+      state: 'Uttar Pradesh',
       district: 'Lucknow',
       password: 'admin123'
     },
-    'GVT004': { 
-      name: 'Sanjay Mukherjee', 
-      department: 'Land Records', 
-      state: 'West Bengal', 
+    'GVT004': {
+      name: 'Sanjay Mukherjee',
+      department: 'Land Records',
+      state: 'West Bengal',
       district: 'Kolkata',
       password: 'admin123'
     }
@@ -149,16 +149,16 @@ export default function GovernmentPortal() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!loginState || !loginDistrict) {
       setMessage('❌ Please select both state and district');
       return;
     }
-    
+
     const officer = GOVERNMENT_OFFICERS[employeeId as keyof typeof GOVERNMENT_OFFICERS];
     if (officer && officer.password === password) {
-      setCurrentOfficer({ 
-        ...officer, 
+      setCurrentOfficer({
+        ...officer,
         employeeId,
         selectedState: loginState,
         selectedDistrict: loginDistrict
@@ -202,12 +202,12 @@ export default function GovernmentPortal() {
         for (const id of pendingIds) {
           const request = await contract.getVerificationRequestDetails(Number(id));
           const propertyId = Number(request.propertyId);
-          
+
           // Skip if property is deleted
           if (deletedProperties.includes(propertyId)) {
             continue;
           }
-          
+
           requests.push({
             verificationId: Number(id),
             propertyId: propertyId,
@@ -229,12 +229,12 @@ export default function GovernmentPortal() {
         for (const id of pendingIds) {
           const request = await contract.getTransferRequestDetails(Number(id));
           const propertyId = Number(request.propertyId);
-          
+
           // Skip if property is deleted
           if (deletedProperties.includes(propertyId)) {
             continue;
           }
-          
+
           requests.push({
             requestId: Number(id),
             propertyId: propertyId,
@@ -264,23 +264,40 @@ export default function GovernmentPortal() {
       const provider = getProvider();
       const contract = getContract(provider);
 
-      const totalProperties = await contract.getTotalProperties();
-      const properties: Property[] = [];
-
       // Get list of deleted properties from localStorage
       const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
 
-      // Load all properties
-      for (let i = 1; i <= Number(totalProperties); i++) {
+      let propertyIds: bigint[] = [];
+
+      // Use smart contract's searchPropertiesByLocation function to get properties by state and district
+      if (currentOfficer?.selectedState && currentOfficer?.selectedDistrict) {
+        console.log(`Searching properties in ${currentOfficer.selectedDistrict}, ${currentOfficer.selectedState}`);
+        propertyIds = await contract.searchPropertiesByLocation(
+          currentOfficer.selectedState,
+          currentOfficer.selectedDistrict
+        );
+        console.log(`Found ${propertyIds.length} properties in the selected location`);
+      } else {
+        // If no state/district selected, load all properties
+        const totalProperties = await contract.getTotalProperties();
+        propertyIds = Array.from({ length: Number(totalProperties) }, (_, i) => BigInt(i + 1));
+      }
+
+      const properties: Property[] = [];
+
+      // Load details for each property
+      for (const id of propertyIds) {
         try {
+          const propertyId = Number(id);
+
           // Skip if property is deleted
-          if (deletedProperties.includes(i)) {
+          if (deletedProperties.includes(propertyId)) {
             continue;
           }
-          
-          const propDetails = await contract.getPropertyDetails(i);
+
+          const propDetails = await contract.getPropertyDetails(propertyId);
           properties.push({
-            propertyId: i,
+            propertyId: propertyId,
             propertyAddress: propDetails.propertyAddress,
             district: propDetails.district,
             state: propDetails.state,
@@ -298,22 +315,14 @@ export default function GovernmentPortal() {
             verificationFee: Number(propDetails.verificationFee)
           });
         } catch (error) {
-          console.error(`Error loading property ${i}:`, error);
+          console.error(`Error loading property ${id}:`, error);
         }
       }
 
       setAllProperties(properties);
-      
-      // Auto-filter by officer's selected state and district
-      if (currentOfficer?.selectedState && currentOfficer?.selectedDistrict) {
-        const filtered = properties.filter(p => 
-          p.state.toLowerCase() === currentOfficer.selectedState.toLowerCase() &&
-          p.district.toLowerCase() === currentOfficer.selectedDistrict.toLowerCase()
-        );
-        setFilteredProperties(filtered);
-      } else {
-        setFilteredProperties(properties);
-      }
+      setFilteredProperties(properties);
+
+      console.log(`Loaded ${properties.length} properties for display`);
     } catch (error) {
       console.error('Error loading properties:', error);
       setMessage('❌ Failed to load properties');
@@ -330,13 +339,8 @@ export default function GovernmentPortal() {
   const applyFilters = (query: string) => {
     let filtered = [...allProperties];
 
-    // Filter by officer's selected state and district
-    if (currentOfficer?.selectedState && currentOfficer?.selectedDistrict) {
-      filtered = filtered.filter(p => 
-        p.state.toLowerCase() === currentOfficer.selectedState.toLowerCase() &&
-        p.district.toLowerCase() === currentOfficer.selectedDistrict.toLowerCase()
-      );
-    }
+    // Note: allProperties is already filtered by state/district from loadAllProperties
+    // So we only need to apply search query filter here
 
     // Filter by search query (address or property ID)
     if (query) {
@@ -356,15 +360,15 @@ export default function GovernmentPortal() {
       setMessage('❌ This property has been deleted and cannot be viewed.');
       return;
     }
-    
+
     setSelectedProperty(property);
-    
+
     // Load owner details
     try {
       const provider = getProvider();
       const contract = getContract(provider);
       const owner = await contract.getOwnerDetails(property.currentOwner);
-      
+
       setOwnerDetails({
         ownerAddress: owner.ownerAddress,
         name: owner.name,
@@ -382,14 +386,14 @@ export default function GovernmentPortal() {
   const loadPropertyDocumentsAndPhotos = (propertyId: number) => {
     // In a real system, these would be fetched from IPFS/decentralized storage
     // For demo purposes, we retrieve from localStorage using the property's documentHash
-    
+
     if (propertyDetails?.documentHash) {
       try {
         const storedFiles = localStorage.getItem(`property_files_${propertyDetails.documentHash}`);
-        
+
         if (storedFiles) {
           const files = JSON.parse(storedFiles);
-          
+
           // Set the actual document uploaded by owner
           if (files.document) {
             setPropertyDocumentUrl(files.document);
@@ -397,7 +401,7 @@ export default function GovernmentPortal() {
             // Fallback to dummy if no document found
             setPropertyDocumentUrl(`https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf`);
           }
-          
+
           // Set the actual photos uploaded by owner
           if (files.photos && files.photos.length > 0) {
             setPropertyPhotos(files.photos);
@@ -429,7 +433,7 @@ export default function GovernmentPortal() {
       const contract = getContract(provider);
 
       const propertyId = activeTab === 'verification' ? request.propertyId : request.propertyId;
-      
+
       // Check if property is deleted
       const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
       if (deletedProperties.includes(propertyId)) {
@@ -437,7 +441,7 @@ export default function GovernmentPortal() {
         setLoading(false);
         return;
       }
-      
+
       // Load property details
       const propDetails = await contract.getPropertyDetails(propertyId);
       setPropertyDetails({
@@ -500,37 +504,139 @@ export default function GovernmentPortal() {
       }
     }
 
+    // Validate that we have all required data
+    if (!selectedRequest || !selectedRequest.verificationId) {
+      setMessage('❌ No verification request selected');
+      return;
+    }
+
+    if (!currentOfficer || !currentOfficer.employeeId) {
+      setMessage('❌ Officer information is missing. Please log out and log in again.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const provider = getProvider();
-      const contract = getContract(provider);
+      setMessage('🔄 Connecting to blockchain...');
 
-      // In a real implementation, this would require the government officer's signature
-      // For demo purposes, we'll show what the transaction would look like
-      setMessage('🔄 In a real system, this would submit the verification decision to the blockchain...');
-      
-      // Simulate processing time
-      setTimeout(() => {
+      // Get signer - in production, this would be the government officer's wallet
+      const signer = await getSigner();
+      const contract = getContract(signer);
+
+      // Check if the request is still pending before submitting
+      try {
+        const requestDetails = await contract.getVerificationRequestDetails(selectedRequest.verificationId);
+
+        if (!requestDetails.isPending) {
+          setMessage('❌ This verification request has already been processed.');
+          setTimeout(() => {
+            setSelectedRequest(null);
+            setPropertyDetails(null);
+            setOwnerDetails(null);
+            loadPendingRequests();
+          }, 2000);
+          setLoading(false);
+          return;
+        }
+
+        // Also verify the property still exists and matches
+        const currentPropertyDetails = await contract.getPropertyDetails(selectedRequest.propertyId);
+        if (!currentPropertyDetails.isRegistered) {
+          setMessage('❌ This property no longer exists or was deleted.');
+          setTimeout(() => {
+            setSelectedRequest(null);
+            setPropertyDetails(null);
+            setOwnerDetails(null);
+            loadPendingRequests();
+          }, 2000);
+          setLoading(false);
+          return;
+        }
+
+        if (currentPropertyDetails.isVerified) {
+          setMessage('❌ This property has already been verified.');
+          setTimeout(() => {
+            setSelectedRequest(null);
+            setPropertyDetails(null);
+            setOwnerDetails(null);
+            loadPendingRequests();
+          }, 2000);
+          setLoading(false);
+          return;
+        }
+      } catch (checkError: any) {
+        console.error('Error checking request status:', checkError);
+        // If we can't check, it might mean the request or property doesn't exist
+        if (checkError.message?.includes('invalid') || checkError.message?.includes('does not exist')) {
+          setMessage('❌ This verification request or property no longer exists. Please refresh the page.');
+          setTimeout(() => {
+            setSelectedRequest(null);
+            setPropertyDetails(null);
+            setOwnerDetails(null);
+            loadPendingRequests();
+          }, 2000);
+          setLoading(false);
+          return;
+        }
+        // Otherwise continue - the transaction will fail if something is wrong
+      }
+
+      setMessage('📝 Submitting verification decision to blockchain...');
+
+      // Call the smart contract function to verify property
+      // Parameters: verificationId, employeeId, approve, notes
+      const tx = await contract.verifyProperty(
+        selectedRequest.verificationId,
+        currentOfficer.employeeId,
+        approvalDecision,
+        verificationNotes || 'Verified by government officer'
+      );
+
+      setMessage(`⏳ Transaction submitted (${tx.hash.slice(0, 10)}...). Waiting for confirmation...`);
+
+      const receipt = await tx.wait();
+      console.log('Verification transaction confirmed:', receipt);
+
+      if (approvalDecision) {
+        const feeInEth = formatEther(selectedRequest.feePaid);
         setMessage(
-          approvalDecision 
-            ? '✅ Property verification approved! The decision has been recorded on the blockchain.'
-            : '❌ Property verification rejected. The decision has been recorded with notes.'
+          `✅ Property verification approved! The decision has been recorded on the blockchain. ` +
+          `Verification fee of ${feeInEth} ETH has been transferred to the government officer's wallet.`
         );
-        
-        // Reset form
+      } else {
+        setMessage('❌ Property verification rejected. The decision has been recorded with notes.');
+      }
+
+      // Reset form after a short delay
+      setTimeout(() => {
         setApprovalDecision(null);
         setVerificationNotes('');
         setSelectedRequest(null);
         setPropertyDetails(null);
         setOwnerDetails(null);
-        
+
         // Reload requests
         loadPendingRequests();
-      }, 2000);
+      }, 3000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing verification:', error);
-      setMessage('❌ Failed to process verification');
+
+      let errorMessage = 'Failed to process verification';
+
+      if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.code === 'CALL_EXCEPTION') {
+        errorMessage = 'Transaction failed: The verification request may have already been processed, or the property state has changed. Please refresh the page and try again.';
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message?.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds in wallet to complete transaction';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setMessage(`❌ Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -548,24 +654,60 @@ export default function GovernmentPortal() {
 
     setLoading(true);
     try {
-      setMessage('🔄 In a real system, this would approve the transfer request on the blockchain...');
-      
-      // Simulate processing time
+      setMessage('🔄 Connecting to blockchain...');
+
+      // Get signer - in production, this would be the government officer's wallet
+      const signer = await getSigner();
+      const contract = getContract(signer);
+
+      setMessage('📝 Approving transfer request on blockchain...');
+
+      // Call the smart contract function to approve transfer
+      // Parameters: requestId, employeeId
+      const tx = await contract.approveTransferRequest(
+        selectedRequest.requestId,
+        currentOfficer.employeeId
+      );
+
+      setMessage(`⏳ Transaction submitted (${tx.hash.slice(0, 10)}...). Waiting for confirmation...`);
+
+      const receipt = await tx.wait();
+      console.log('Transfer approval transaction confirmed:', receipt);
+
+      // Calculate transfer fee in ETH
+      const transferFeeInEth = selectedRequest.transferFee
+        ? (Number(selectedRequest.transferFee) / 1e18).toFixed(4)
+        : '0.002';
+
+      setMessage(
+        `✅ Transfer request approved! The parties can now complete the transfer. ` +
+        `Transfer fee of ${transferFeeInEth} ETH has been transferred to your wallet.`
+      );
+
+      // Reset after a short delay
       setTimeout(() => {
-        setMessage('✅ Transfer request approved! The parties can now complete the transfer.');
-        
-        // Reset
         setSelectedRequest(null);
         setPropertyDetails(null);
         setOwnerDetails(null);
-        
+
         // Reload requests
         loadPendingRequests();
       }, 2000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving transfer:', error);
-      setMessage('❌ Failed to approve transfer');
+
+      let errorMessage = 'Failed to approve transfer';
+
+      if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setMessage(`❌ Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -665,11 +807,10 @@ export default function GovernmentPortal() {
               </div>
 
               {message && (
-                <div className={`p-4 rounded-lg ${
-                  message.includes('✅') 
-                    ? 'bg-green-50 text-green-800' 
-                    : 'bg-red-50 text-red-800'
-                }`}>
+                <div className={`p-4 rounded-lg ${message.includes('✅')
+                  ? 'bg-green-50 text-green-800'
+                  : 'bg-red-50 text-red-800'
+                  }`}>
                   {message}
                 </div>
               )}
@@ -722,7 +863,7 @@ export default function GovernmentPortal() {
                   <p className="text-xs text-gray-500">Official Land Registry Administration</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-4">
                 <div className="text-right">
                   <p className="text-sm font-semibold text-gray-800">{currentOfficer.name}</p>
@@ -749,31 +890,28 @@ export default function GovernmentPortal() {
                 <div className="bg-gray-100 p-1 rounded-lg flex flex-wrap justify-center gap-2">
                   <button
                     onClick={() => setActiveTab('verification')}
-                    className={`px-6 py-3 rounded-lg font-semibold transition ${
-                      activeTab === 'verification'
-                        ? 'bg-white text-red-600 shadow-md'
-                        : 'text-gray-600 hover:text-red-600'
-                    }`}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${activeTab === 'verification'
+                      ? 'bg-white text-red-600 shadow-md'
+                      : 'text-gray-600 hover:text-red-600'
+                      }`}
                   >
                     🔍 Verification ({verificationRequests.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('transfer')}
-                    className={`px-6 py-3 rounded-lg font-semibold transition ${
-                      activeTab === 'transfer'
-                        ? 'bg-white text-red-600 shadow-md'
-                        : 'text-gray-600 hover:text-red-600'
-                    }`}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${activeTab === 'transfer'
+                      ? 'bg-white text-red-600 shadow-md'
+                      : 'text-gray-600 hover:text-red-600'
+                      }`}
                   >
                     🔄 Transfers ({transferRequests.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('properties')}
-                    className={`px-6 py-3 rounded-lg font-semibold transition ${
-                      activeTab === 'properties'
-                        ? 'bg-white text-red-600 shadow-md'
-                        : 'text-gray-600 hover:text-red-600'
-                    }`}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${activeTab === 'properties'
+                      ? 'bg-white text-red-600 shadow-md'
+                      : 'text-gray-600 hover:text-red-600'
+                      }`}
                   >
                     🏘️ Properties ({currentOfficer?.selectedDistrict})
                   </button>
@@ -784,13 +922,12 @@ export default function GovernmentPortal() {
 
           {/* Message Display */}
           {message && (
-            <div className={`mb-6 p-4 rounded-lg ${
-              message.includes('✅') 
-                ? 'bg-green-50 border border-green-200 text-green-800'
-                : message.includes('❌')
+            <div className={`mb-6 p-4 rounded-lg ${message.includes('✅')
+              ? 'bg-green-50 border border-green-200 text-green-800'
+              : message.includes('❌')
                 ? 'bg-red-50 border border-red-200 text-red-800'
                 : 'bg-blue-50 border border-blue-200 text-blue-800'
-            }`}>
+              }`}>
               {message}
             </div>
           )}
@@ -845,11 +982,10 @@ export default function GovernmentPortal() {
                           </h3>
                           <p className="text-sm text-gray-600">{property.propertyAddress}</p>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          property.isVerified 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${property.isVerified
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                          }`}>
                           {property.isVerified ? '✅' : '⏳'}
                         </span>
                       </div>
@@ -924,11 +1060,10 @@ export default function GovernmentPortal() {
                           )}
                           <div>
                             <p className="text-sm text-gray-500">Status</p>
-                            <span className={`px-2 py-1 rounded text-sm font-semibold ${
-                              selectedProperty.isVerified 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
+                            <span className={`px-2 py-1 rounded text-sm font-semibold ${selectedProperty.isVerified
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                              }`}>
                               {selectedProperty.isVerified ? '✅ Verified' : '⏳ Pending'}
                             </span>
                           </div>
@@ -982,307 +1117,201 @@ export default function GovernmentPortal() {
               )}
             </div>
           ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Requests List */}
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">
-                  {activeTab === 'verification' ? 'Pending Verifications' : 'Pending Transfers'}
-                </h3>
-
-                {loading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-2"></div>
-                    <p className="text-gray-600">Loading requests...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {activeTab === 'verification' ? (
-                      verificationRequests.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">No pending verification requests</p>
-                      ) : (
-                        verificationRequests.map((request) => (
-                          <div
-                            key={request.verificationId}
-                            onClick={() => loadRequestDetails(request)}
-                            className={`p-4 border rounded-lg cursor-pointer transition ${
-                              selectedRequest?.verificationId === request.verificationId
-                                ? 'border-red-500 bg-red-50'
-                                : 'border-gray-200 hover:border-red-300'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-semibold text-gray-800">
-                                Property #{request.propertyId}
-                              </h4>
-                              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                                Pending
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-1">
-                              Fee: {formatEther(request.feePaid)} ETH
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {formatDate(request.requestDate)}
-                            </p>
-                          </div>
-                        ))
-                      )
-                    ) : (
-                      transferRequests.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">No pending transfer requests</p>
-                      ) : (
-                        transferRequests.map((request) => (
-                          <div
-                            key={request.requestId}
-                            onClick={() => loadRequestDetails(request)}
-                            className={`p-4 border rounded-lg cursor-pointer transition ${
-                              selectedRequest?.requestId === request.requestId
-                                ? 'border-red-500 bg-red-50'
-                                : 'border-gray-200 hover:border-red-300'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-semibold text-gray-800">
-                                Property #{request.propertyId}
-                              </h4>
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                Transfer
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-1">
-                              Fee: {formatEther(request.transferFee)} ETH
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {formatDate(request.requestDate)}
-                            </p>
-                          </div>
-                        ))
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Request Details */}
-            <div className="lg:col-span-2">
-              {selectedRequest ? (
-                <div className="bg-white rounded-xl shadow-lg p-8">
-                  <h3 className="text-2xl font-bold text-gray-800 mb-6">
-                    {activeTab === 'verification' ? 'Verification' : 'Transfer'} Request Details
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Requests List */}
+              <div className="lg:col-span-1">
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4">
+                    {activeTab === 'verification' ? 'Pending Verifications' : 'Pending Transfers'}
                   </h3>
 
-                  {propertyDetails && ownerDetails && (
-                    <div className="space-y-6">
-                      {/* Property Information - Full Details */}
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-                        <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                          <span className="mr-2">🏠</span> Complete Property Information
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Property ID</p>
-                            <p className="text-lg font-bold text-gray-800">#{propertyDetails.propertyId}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Registration Status</p>
-                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                              propertyDetails.isRegistered 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {propertyDetails.isRegistered ? '✅ Registered' : '⏳ Pending'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Verification Status</p>
-                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                              propertyDetails.isVerified 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {propertyDetails.isVerified ? '✅ Verified' : '⏳ Awaiting Verification'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Transfer Status</p>
-                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                              propertyDetails.isTransferable 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {propertyDetails.isTransferable ? '✅ Transferable' : '❌ Non-Transferable'}
-                            </span>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-600 font-semibold">Property Address</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.propertyAddress}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">District</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.district}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">State</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.state}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Property Type</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.propertyType}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Total Area</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.area.toLocaleString()} sq m</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Survey Number</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.surveyNumber || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Sub Division</p>
-                            <p className="text-base font-bold text-gray-800">{propertyDetails.subDivision || 'N/A'}</p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-600 font-semibold">Document Hash (Blockchain)</p>
-                            <p className="text-xs font-mono bg-white px-3 py-2 rounded border border-gray-300 break-all">
-                              {propertyDetails.documentHash}
-                            </p>
-                          </div>
-                          
-                          {/* Property Documents and Photos */}
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-600 font-semibold mb-2">Property Documents & Media</p>
-                            <div className="flex gap-3">
-                              <button
-                                onClick={() => setShowDocumentModal(true)}
-                                disabled={!propertyDocumentUrl}
-                                className={`flex-1 px-4 py-3 rounded-lg transition font-semibold text-sm flex items-center justify-center gap-2 ${
-                                  propertyDocumentUrl
-                                    ? 'bg-red-600 text-white hover:bg-red-700'
-                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-2"></div>
+                      <p className="text-gray-600">Loading requests...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {activeTab === 'verification' ? (
+                        verificationRequests.length === 0 ? (
+                          <p className="text-gray-500 text-center py-8">No pending verification requests</p>
+                        ) : (
+                          verificationRequests.map((request) => (
+                            <div
+                              key={request.verificationId}
+                              onClick={() => loadRequestDetails(request)}
+                              className={`p-4 border rounded-lg cursor-pointer transition ${selectedRequest?.verificationId === request.verificationId
+                                ? 'border-red-500 bg-red-50'
+                                : 'border-gray-200 hover:border-red-300'
                                 }`}
-                              >
-                                📄 {propertyDocumentUrl ? 'View Property Document' : 'No Document Available'}
-                              </button>
-                              <button
-                                onClick={() => setShowPhotosModal(true)}
-                                disabled={propertyPhotos.length === 0}
-                                className={`flex-1 px-4 py-3 rounded-lg transition font-semibold text-sm flex items-center justify-center gap-2 ${
-                                  propertyPhotos.length > 0
-                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                }`}
-                              >
-                                🖼️ {propertyPhotos.length > 0 ? `View Property Photos (${propertyPhotos.length})` : 'No Photos Available'}
-                              </button>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Registration Date</p>
-                            <p className="text-base font-bold text-gray-800">
-                              {new Date(propertyDetails.registrationDate * 1000).toLocaleString('en-IN', {
-                                dateStyle: 'medium',
-                                timeStyle: 'short'
-                              })}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Verification Fee Paid</p>
-                            <p className="text-base font-bold text-green-700">
-                              {formatEther(propertyDetails.verificationFee)} ETH
-                            </p>
-                          </div>
-                          {propertyDetails.lastTransferDate > 0 && (
-                            <div>
-                              <p className="text-sm text-gray-600 font-semibold">Last Transfer Date</p>
-                              <p className="text-base font-bold text-gray-800">
-                                {new Date(propertyDetails.lastTransferDate * 1000).toLocaleString('en-IN', {
-                                  dateStyle: 'medium',
-                                  timeStyle: 'short'
-                                })}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <h4 className="font-semibold text-gray-800">
+                                  Property #{request.propertyId}
+                                </h4>
+                                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                                  Pending
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-1">
+                                Fee: {formatEther(request.feePaid)} ETH
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {formatDate(request.requestDate)}
                               </p>
                             </div>
-                          )}
-                        </div>
-                      </div>
+                          ))
+                        )
+                      ) : (
+                        transferRequests.length === 0 ? (
+                          <p className="text-gray-500 text-center py-8">No pending transfer requests</p>
+                        ) : (
+                          transferRequests.map((request) => (
+                            <div
+                              key={request.requestId}
+                              onClick={() => loadRequestDetails(request)}
+                              className={`p-4 border rounded-lg cursor-pointer transition ${selectedRequest?.requestId === request.requestId
+                                ? 'border-red-500 bg-red-50'
+                                : 'border-gray-200 hover:border-red-300'
+                                }`}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <h4 className="font-semibold text-gray-800">
+                                  Property #{request.propertyId}
+                                </h4>
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                  Transfer
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-1">
+                                Fee: {formatEther(request.transferFee)} ETH
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {formatDate(request.requestDate)}
+                              </p>
+                            </div>
+                          ))
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                      {/* Owner Information - Full Details */}
-                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
-                        <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                          <span className="mr-2">👤</span> Complete Owner Information
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Owner Name</p>
-                            <p className="text-lg font-bold text-gray-800">{ownerDetails.name}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Owner Verification Status</p>
-                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                              ownerDetails.isVerified 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {ownerDetails.isVerified ? '✅ Verified Owner' : '⏳ Pending Verification'}
-                            </span>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-600 font-semibold">Contact Information</p>
-                            <p className="text-base font-bold text-gray-800">{ownerDetails.contactInfo}</p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-600 font-semibold">Government ID Document</p>
-                            <p className="text-base font-mono font-bold text-gray-800 bg-white px-3 py-2 rounded border border-gray-300">
-                              {ownerDetails.idDocument}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Home District</p>
-                            <p className="text-base font-bold text-gray-800">{ownerDetails.homeDistrict}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-600 font-semibold">Home State</p>
-                            <p className="text-base font-bold text-gray-800">{ownerDetails.homeState}</p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-600 font-semibold">Blockchain Wallet Address</p>
-                            <p className="text-xs font-mono bg-white px-3 py-2 rounded border border-gray-300 break-all">
-                              {ownerDetails.ownerAddress}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+              {/* Request Details */}
+              <div className="lg:col-span-2">
+                {selectedRequest ? (
+                  <div className="bg-white rounded-xl shadow-lg p-8">
+                    <h3 className="text-2xl font-bold text-gray-800 mb-6">
+                      {activeTab === 'verification' ? 'Verification' : 'Transfer'} Request Details
+                    </h3>
 
-                      {/* Verification Request Details */}
-                      {activeTab === 'verification' && selectedRequest && (
-                        <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200">
+                    {propertyDetails && ownerDetails && (
+                      <div className="space-y-6">
+                        {/* Property Information - Full Details */}
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
                           <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                            <span className="mr-2">📋</span> Verification Request Details
+                            <span className="mr-2">🏠</span> Complete Property Information
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <p className="text-sm text-gray-600 font-semibold">Verification Request ID</p>
-                              <p className="text-lg font-bold text-gray-800">#{selectedRequest.verificationId}</p>
+                              <p className="text-sm text-gray-600 font-semibold">Property ID</p>
+                              <p className="text-lg font-bold text-gray-800">#{propertyDetails.propertyId}</p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-600 font-semibold">Request Status</p>
-                              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                                selectedRequest.isPending 
-                                  ? 'bg-yellow-100 text-yellow-800' 
-                                  : selectedRequest.isApproved
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {selectedRequest.isPending ? '⏳ Pending Review' : selectedRequest.isApproved ? '✅ Approved' : '❌ Rejected'}
+                              <p className="text-sm text-gray-600 font-semibold">Registration Status</p>
+                              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${propertyDetails.isRegistered
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                {propertyDetails.isRegistered ? '✅ Registered' : '⏳ Pending'}
                               </span>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-600 font-semibold">Request Date & Time</p>
+                              <p className="text-sm text-gray-600 font-semibold">Verification Status</p>
+                              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${propertyDetails.isVerified
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                {propertyDetails.isVerified ? '✅ Verified' : '⏳ Awaiting Verification'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Transfer Status</p>
+                              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${propertyDetails.isTransferable
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                                }`}>
+                                {propertyDetails.isTransferable ? '✅ Transferable' : '❌ Non-Transferable'}
+                              </span>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-600 font-semibold">Property Address</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.propertyAddress}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">District</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.district}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">State</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.state}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Property Type</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.propertyType}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Total Area</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.area.toLocaleString()} sq m</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Survey Number</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.surveyNumber || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Sub Division</p>
+                              <p className="text-base font-bold text-gray-800">{propertyDetails.subDivision || 'N/A'}</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-600 font-semibold">Document Hash (Blockchain)</p>
+                              <p className="text-xs font-mono bg-white px-3 py-2 rounded border border-gray-300 break-all">
+                                {propertyDetails.documentHash}
+                              </p>
+                            </div>
+
+                            {/* Property Documents and Photos */}
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-600 font-semibold mb-2">Property Documents & Media</p>
+                              <div className="flex gap-3">
+                                <button
+                                  onClick={() => setShowDocumentModal(true)}
+                                  disabled={!propertyDocumentUrl}
+                                  className={`flex-1 px-4 py-3 rounded-lg transition font-semibold text-sm flex items-center justify-center gap-2 ${propertyDocumentUrl
+                                    ? 'bg-red-600 text-white hover:bg-red-700'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                  📄 {propertyDocumentUrl ? 'View Property Document' : 'No Document Available'}
+                                </button>
+                                <button
+                                  onClick={() => setShowPhotosModal(true)}
+                                  disabled={propertyPhotos.length === 0}
+                                  className={`flex-1 px-4 py-3 rounded-lg transition font-semibold text-sm flex items-center justify-center gap-2 ${propertyPhotos.length > 0
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                  🖼️ {propertyPhotos.length > 0 ? `View Property Photos (${propertyPhotos.length})` : 'No Photos Available'}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Registration Date</p>
                               <p className="text-base font-bold text-gray-800">
-                                {new Date(selectedRequest.requestDate * 1000).toLocaleString('en-IN', {
-                                  dateStyle: 'full',
+                                {new Date(propertyDetails.registrationDate * 1000).toLocaleString('en-IN', {
+                                  dateStyle: 'medium',
                                   timeStyle: 'short'
                                 })}
                               </p>
@@ -1290,129 +1319,224 @@ export default function GovernmentPortal() {
                             <div>
                               <p className="text-sm text-gray-600 font-semibold">Verification Fee Paid</p>
                               <p className="text-base font-bold text-green-700">
-                                {formatEther(selectedRequest.feePaid)} ETH
+                                {formatEther(propertyDetails.verificationFee)} ETH
                               </p>
                             </div>
-                            <div className="md:col-span-2">
-                              <p className="text-sm text-gray-600 font-semibold">Property Owner (Requester)</p>
-                              <p className="text-xs font-mono bg-white px-3 py-2 rounded border border-gray-300 break-all">
-                                {selectedRequest.propertyOwner}
-                              </p>
-                            </div>
-                            {selectedRequest.officerEmployeeId && (
+                            {propertyDetails.lastTransferDate > 0 && (
                               <div>
-                                <p className="text-sm text-gray-600 font-semibold">Assigned Officer ID</p>
-                                <p className="text-base font-bold text-gray-800">{selectedRequest.officerEmployeeId || 'Not Assigned'}</p>
-                              </div>
-                            )}
-                            {selectedRequest.verificationNotes && (
-                              <div className="md:col-span-2">
-                                <p className="text-sm text-gray-600 font-semibold">Previous Notes</p>
-                                <p className="text-base text-gray-800 bg-white px-3 py-2 rounded border border-gray-300">
-                                  {selectedRequest.verificationNotes}
+                                <p className="text-sm text-gray-600 font-semibold">Last Transfer Date</p>
+                                <p className="text-base font-bold text-gray-800">
+                                  {new Date(propertyDetails.lastTransferDate * 1000).toLocaleString('en-IN', {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short'
+                                  })}
                                 </p>
                               </div>
                             )}
                           </div>
                         </div>
-                      )}
-                    </div>
-                  )}
 
-                  {/* Action Section */}
-                  {activeTab === 'verification' ? (
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <h4 className="text-lg font-semibold text-gray-800 mb-4">Verification Decision</h4>
-                      
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Decision
-                          </label>
-                          <div className="flex space-x-4">
-                            <button
-                              onClick={() => setApprovalDecision(true)}
-                              className={`px-6 py-2 rounded-lg font-semibold transition ${
-                                approvalDecision === true
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-green-100'
-                              }`}
-                            >
-                              ✅ Approve
-                            </button>
-                            <button
-                              onClick={() => setApprovalDecision(false)}
-                              className={`px-6 py-2 rounded-lg font-semibold transition ${
-                                approvalDecision === false
-                                  ? 'bg-red-600 text-white'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-red-100'
-                              }`}
-                            >
-                              ❌ Reject
-                            </button>
+                        {/* Owner Information - Full Details */}
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
+                          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                            <span className="mr-2">👤</span> Complete Owner Information
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Owner Name</p>
+                              <p className="text-lg font-bold text-gray-800">{ownerDetails.name}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Owner Verification Status</p>
+                              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${ownerDetails.isVerified
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                {ownerDetails.isVerified ? '✅ Verified Owner' : '⏳ Pending Verification'}
+                              </span>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-600 font-semibold">Contact Information</p>
+                              <p className="text-base font-bold text-gray-800">{ownerDetails.contactInfo}</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-600 font-semibold">Government ID Document</p>
+                              <p className="text-base font-mono font-bold text-gray-800 bg-white px-3 py-2 rounded border border-gray-300">
+                                {ownerDetails.idDocument}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Home District</p>
+                              <p className="text-base font-bold text-gray-800">{ownerDetails.homeDistrict}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 font-semibold">Home State</p>
+                              <p className="text-base font-bold text-gray-800">{ownerDetails.homeState}</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-600 font-semibold">Blockchain Wallet Address</p>
+                              <p className="text-xs font-mono bg-white px-3 py-2 rounded border border-gray-300 break-all">
+                                {ownerDetails.ownerAddress}
+                              </p>
+                            </div>
                           </div>
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Verification Notes
-                          </label>
-                          <textarea
-                            value={verificationNotes}
-                            onChange={(e) => setVerificationNotes(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                            rows={4}
-                            placeholder="Enter verification notes and comments..."
-                          />
+                        {/* Verification Request Details */}
+                        {activeTab === 'verification' && selectedRequest && (
+                          <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200">
+                            <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                              <span className="mr-2">📋</span> Verification Request Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-sm text-gray-600 font-semibold">Verification Request ID</p>
+                                <p className="text-lg font-bold text-gray-800">#{selectedRequest.verificationId}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600 font-semibold">Request Status</p>
+                                <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${selectedRequest.isPending
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : selectedRequest.isApproved
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800'
+                                  }`}>
+                                  {selectedRequest.isPending ? '⏳ Pending Review' : selectedRequest.isApproved ? '✅ Approved' : '❌ Rejected'}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600 font-semibold">Request Date & Time</p>
+                                <p className="text-base font-bold text-gray-800">
+                                  {new Date(selectedRequest.requestDate * 1000).toLocaleString('en-IN', {
+                                    dateStyle: 'full',
+                                    timeStyle: 'short'
+                                  })}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600 font-semibold">Verification Fee Paid</p>
+                                <p className="text-base font-bold text-green-700">
+                                  {formatEther(selectedRequest.feePaid)} ETH
+                                </p>
+                              </div>
+                              <div className="md:col-span-2">
+                                <p className="text-sm text-gray-600 font-semibold">Property Owner (Requester)</p>
+                                <p className="text-xs font-mono bg-white px-3 py-2 rounded border border-gray-300 break-all">
+                                  {selectedRequest.propertyOwner}
+                                </p>
+                              </div>
+                              {selectedRequest.officerEmployeeId && (
+                                <div>
+                                  <p className="text-sm text-gray-600 font-semibold">Assigned Officer ID</p>
+                                  <p className="text-base font-bold text-gray-800">{selectedRequest.officerEmployeeId || 'Not Assigned'}</p>
+                                </div>
+                              )}
+                              {selectedRequest.verificationNotes && (
+                                <div className="md:col-span-2">
+                                  <p className="text-sm text-gray-600 font-semibold">Previous Notes</p>
+                                  <p className="text-base text-gray-800 bg-white px-3 py-2 rounded border border-gray-300">
+                                    {selectedRequest.verificationNotes}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action Section */}
+                    {activeTab === 'verification' ? (
+                      <div className="mt-8 pt-6 border-t border-gray-200">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4">Verification Decision</h4>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              Decision
+                            </label>
+                            <div className="flex space-x-4">
+                              <button
+                                onClick={() => setApprovalDecision(true)}
+                                className={`px-6 py-2 rounded-lg font-semibold transition ${approvalDecision === true
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-green-100'
+                                  }`}
+                              >
+                                ✅ Approve
+                              </button>
+                              <button
+                                onClick={() => setApprovalDecision(false)}
+                                className={`px-6 py-2 rounded-lg font-semibold transition ${approvalDecision === false
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-red-100'
+                                  }`}
+                              >
+                                ❌ Reject
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              Verification Notes
+                            </label>
+                            <textarea
+                              value={verificationNotes}
+                              onChange={(e) => setVerificationNotes(e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                              rows={4}
+                              placeholder="Enter verification notes and comments..."
+                            />
+                          </div>
+
+                          <button
+                            onClick={handleVerifyProperty}
+                            disabled={loading || approvalDecision === null}
+                            className="w-full py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {loading ? 'Processing...' : 'Submit Verification Decision'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-8 pt-6 border-t border-gray-200">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4">Transfer Approval</h4>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                          <h5 className="font-semibold text-blue-800 mb-2">Transfer Details:</h5>
+                          <p className="text-blue-700 text-sm">
+                            <strong>From:</strong> {selectedRequest.fromOwner}
+                          </p>
+                          <p className="text-blue-700 text-sm">
+                            <strong>To:</strong> {selectedRequest.toOwner}
+                          </p>
+                          <p className="text-blue-700 text-sm">
+                            <strong>Fee Paid:</strong> {formatEther(selectedRequest.transferFee)} ETH
+                          </p>
                         </div>
 
                         <button
-                          onClick={handleVerifyProperty}
-                          disabled={loading || approvalDecision === null}
-                          className="w-full py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={handleApproveTransfer}
+                          disabled={loading}
+                          className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {loading ? 'Processing...' : 'Submit Verification Decision'}
+                          {loading ? 'Processing...' : 'Approve Transfer Request'}
                         </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <h4 className="text-lg font-semibold text-gray-800 mb-4">Transfer Approval</h4>
-                      
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                        <h5 className="font-semibold text-blue-800 mb-2">Transfer Details:</h5>
-                        <p className="text-blue-700 text-sm">
-                          <strong>From:</strong> {selectedRequest.fromOwner}
-                        </p>
-                        <p className="text-blue-700 text-sm">
-                          <strong>To:</strong> {selectedRequest.toOwner}
-                        </p>
-                        <p className="text-blue-700 text-sm">
-                          <strong>Fee Paid:</strong> {formatEther(selectedRequest.transferFee)} ETH
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={handleApproveTransfer}
-                        disabled={loading}
-                        className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {loading ? 'Processing...' : 'Approve Transfer Request'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-                  <div className="text-5xl mb-4">📋</div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">Select a Request</h3>
-                  <p className="text-gray-600">
-                    Choose a {activeTab === 'verification' ? 'verification' : 'transfer'} request from the list to view details and take action.
-                  </p>
-                </div>
-              )}
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+                    <div className="text-5xl mb-4">📋</div>
+                    <h3 className="text-xl font-bold text-gray-800 mb-2">Select a Request</h3>
+                    <p className="text-gray-600">
+                      Choose a {activeTab === 'verification' ? 'verification' : 'transfer'} request from the list to view details and take action.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
           )}
         </main>
 
@@ -1489,7 +1613,7 @@ export default function GovernmentPortal() {
                   ×
                 </button>
               </div>
-              
+
               <div className="flex-1 overflow-hidden p-6 flex items-center justify-center bg-gray-100">
                 {propertyPhotos.length > 0 && (
                   <div className="relative w-full h-full flex items-center justify-center">
@@ -1498,7 +1622,7 @@ export default function GovernmentPortal() {
                       alt={`Property Photo ${selectedPhotoIndex + 1}`}
                       className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                     />
-                    
+
                     {/* Navigation Arrows */}
                     {propertyPhotos.length > 1 && (
                       <>
@@ -1531,11 +1655,10 @@ export default function GovernmentPortal() {
                     <button
                       key={index}
                       onClick={() => setSelectedPhotoIndex(index)}
-                      className={`flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-4 transition ${
-                        selectedPhotoIndex === index
-                          ? 'border-blue-600 shadow-lg'
-                          : 'border-gray-300 hover:border-blue-400'
-                      }`}
+                      className={`flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-4 transition ${selectedPhotoIndex === index
+                        ? 'border-blue-600 shadow-lg'
+                        : 'border-gray-300 hover:border-blue-400'
+                        }`}
                     >
                       <img
                         src={photo}

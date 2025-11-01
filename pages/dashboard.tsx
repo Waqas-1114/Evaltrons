@@ -55,7 +55,7 @@ export default function Dashboard() {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const accounts = await provider.listAccounts();
-        
+
         if (accounts.length > 0) {
           const signer = await provider.getSigner();
           const address = await signer.getAddress();
@@ -75,7 +75,7 @@ export default function Dashboard() {
         await provider.send('eth_requestAccounts', []);
         const signer = await provider.getSigner();
         const address = await signer.getAddress();
-        
+
         setAccount(address);
         setIsConnected(true);
       } catch (error) {
@@ -89,14 +89,14 @@ export default function Dashboard() {
 
   const loadOwnerInfo = async () => {
     if (!account) return;
-    
+
     setLoadingOwner(true);
     try {
       const provider = getProvider();
       const contract = getContract(provider);
-      
+
       const ownerDetails = await contract.getOwnerDetails(account);
-      
+
       if (ownerDetails.name) {
         setOwnerInfo({
           name: ownerDetails.name,
@@ -149,16 +149,16 @@ export default function Dashboard() {
       const contract = getContract(provider);
       const propDetails = await contract.getPropertyDetails(propertyToDelete.id);
       const documentHash = propDetails.documentHash;
-      
+
       if (documentHash) {
         localStorage.removeItem(`property_files_${documentHash}`);
       }
 
       alert('✅ Property marked as deleted successfully! It will no longer appear in your dashboard.');
-      
+
       // Reload dashboard data
       await loadDashboardData();
-      
+
       setShowDeleteModal(false);
       setPropertyToDelete(null);
     } catch (error) {
@@ -186,7 +186,7 @@ export default function Dashboard() {
       let verifiedCount = 0;
       let pendingCount = 0;
       const recentProps = [];
-      
+
       // Get list of deleted properties from localStorage
       const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
 
@@ -196,7 +196,7 @@ export default function Dashboard() {
           if (deletedProperties.includes(i)) {
             continue;
           }
-          
+
           const property = await contract.getPropertyDetails(i);
           if (property.isRegistered) {
             if (property.isVerified) {
@@ -204,7 +204,7 @@ export default function Dashboard() {
             } else {
               pendingCount++;
             }
-            
+
             recentProps.push({
               id: i,
               address: property.propertyAddress,
@@ -266,7 +266,7 @@ export default function Dashboard() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const verificationRate = stats.totalProperties > 0 
+  const verificationRate = stats.totalProperties > 0
     ? ((stats.verifiedProperties / stats.totalProperties) * 100).toFixed(1)
     : '0';
 
@@ -290,7 +290,7 @@ export default function Dashboard() {
                   <p className="text-xs text-gray-500">Registry Analytics</p>
                 </div>
               </Link>
-              
+
               <div className="flex items-center space-x-4">
                 {isConnected ? (
                   <div className="text-right">
@@ -346,17 +346,16 @@ export default function Dashboard() {
                             <p className="text-sm text-gray-600">Registered Owner Dashboard</p>
                           </div>
                         </div>
-                        <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                          ownerInfo.isVerified 
-                            ? 'bg-green-100 text-green-800' 
+                        <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${ownerInfo.isVerified
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-yellow-100 text-yellow-800'
-                        }`}>
+                          }`}>
                           <span className="text-sm font-semibold">
                             {ownerInfo.isVerified ? '✅ Government Verified' : '⏳ Pending Verification'}
                           </span>
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <p className="text-sm text-gray-500 mb-1">Contact Info</p>
@@ -372,6 +371,12 @@ export default function Dashboard() {
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold text-sm"
                           >
                             Register Property
+                          </Link>
+                          <Link
+                            href="/request-transfer"
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold text-sm"
+                          >
+                            Request Transfer
                           </Link>
                           <Link
                             href="/my-properties"
@@ -461,29 +466,29 @@ export default function Dashboard() {
                         <span className="text-sm text-gray-500">{stats.verifiedProperties}</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className="bg-green-500 h-2 rounded-full transition-all duration-1000"
-                          style={{ 
-                            width: stats.totalProperties > 0 
-                              ? `${(stats.verifiedProperties / stats.totalProperties) * 100}%` 
-                              : '0%' 
+                          style={{
+                            width: stats.totalProperties > 0
+                              ? `${(stats.verifiedProperties / stats.totalProperties) * 100}%`
+                              : '0%'
                           }}
                         ></div>
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-sm font-medium text-gray-700">Pending Verification</span>
                         <span className="text-sm text-gray-500">{stats.pendingVerifications}</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className="bg-orange-500 h-2 rounded-full transition-all duration-1000"
-                          style={{ 
-                            width: stats.totalProperties > 0 
-                              ? `${(stats.pendingVerifications / stats.totalProperties) * 100}%` 
-                              : '0%' 
+                          style={{
+                            width: stats.totalProperties > 0
+                              ? `${(stats.pendingVerifications / stats.totalProperties) * 100}%`
+                              : '0%'
                           }}
                         ></div>
                       </div>
@@ -496,15 +501,14 @@ export default function Dashboard() {
                   <h3 className="text-lg font-bold text-gray-800 mb-4">Registry Health</h3>
                   <div className="space-y-6">
                     <div className="text-center">
-                      <div className={`text-6xl font-bold mb-2 ${
-                        parseFloat(verificationRate) >= 80 ? 'text-green-500' :
-                        parseFloat(verificationRate) >= 50 ? 'text-yellow-500' : 'text-red-500'
-                      }`}>
+                      <div className={`text-6xl font-bold mb-2 ${parseFloat(verificationRate) >= 80 ? 'text-green-500' :
+                          parseFloat(verificationRate) >= 50 ? 'text-yellow-500' : 'text-red-500'
+                        }`}>
                         {verificationRate}%
                       </div>
                       <p className="text-gray-600">Properties Verified</p>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
                         <div className="text-2xl font-bold text-blue-600">{stats.totalProperties}</div>
@@ -532,7 +536,7 @@ export default function Dashboard() {
                       View All →
                     </Link>
                   </div>
-                  
+
                   {stats.recentProperties.length === 0 ? (
                     <div className="text-center py-8">
                       <div className="text-4xl mb-2">🏘️</div>
@@ -553,11 +557,10 @@ export default function Dashboard() {
                           </div>
                           <div className="text-right flex items-center gap-3">
                             <div>
-                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                                property.verified 
-                                  ? 'bg-green-100 text-green-800' 
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${property.verified
+                                  ? 'bg-green-100 text-green-800'
                                   : 'bg-yellow-100 text-yellow-800'
-                              }`}>
+                                }`}>
                                 {property.verified ? 'Verified' : 'Pending'}
                               </span>
                               <p className="text-xs text-gray-500 mt-1">
@@ -589,7 +592,7 @@ export default function Dashboard() {
                       Admin Panel →
                     </Link>
                   </div>
-                  
+
                   {stats.recentTransfers.length === 0 ? (
                     <div className="text-center py-8">
                       <div className="text-4xl mb-2">📋</div>
@@ -609,13 +612,12 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className="text-right">
-                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                              transfer.completed
+                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${transfer.completed
                                 ? 'bg-green-100 text-green-800'
                                 : transfer.approved
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
                               {transfer.completed ? 'Completed' : transfer.approved ? 'Approved' : 'Pending'}
                             </span>
                             <p className="text-xs text-gray-500 mt-1">

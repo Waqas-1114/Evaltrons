@@ -45,7 +45,7 @@ export default function Search() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [error, setError] = useState('');
   const [totalProperties, setTotalProperties] = useState(0);
-  
+
   // Location search
   const [selectedState, setSelectedState] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('');
@@ -70,7 +70,7 @@ export default function Search() {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const accounts = await provider.listAccounts();
-        
+
         if (accounts.length > 0) {
           const signer = await provider.getSigner();
           const address = await signer.getAddress();
@@ -90,7 +90,7 @@ export default function Search() {
         await provider.send('eth_requestAccounts', []);
         const signer = await provider.getSigner();
         const address = await signer.getAddress();
-        
+
         setAccount(address);
         setIsConnected(true);
       } catch (error) {
@@ -106,7 +106,7 @@ export default function Search() {
     try {
       const provider = getProvider();
       const contract = getContract(provider);
-      
+
       const total = await contract.getTotalProperties();
       setTotalProperties(Number(total));
     } catch (error) {
@@ -116,7 +116,7 @@ export default function Search() {
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
+
     setSearching(true);
     setError('');
     setProperty(null);
@@ -130,20 +130,23 @@ export default function Search() {
       if (searchType === 'property') {
         if (!searchQuery.trim()) {
           setError('Please enter a property ID');
+          setSearching(false);
           return;
         }
 
         const propertyId = parseInt(searchQuery);
         if (isNaN(propertyId) || propertyId <= 0) {
           setError('Please enter a valid property ID (positive number)');
+          setSearching(false);
           return;
         }
 
         try {
           const details = await contract.getPropertyDetails(propertyId);
-          
+
           if (!details.isRegistered) {
             setError('Property not found');
+            setSearching(false);
             return;
           }
 
@@ -167,23 +170,28 @@ export default function Search() {
           });
         } catch (error) {
           setError('Property not found');
+          setSearching(false);
+          return;
         }
       } else if (searchType === 'owner') {
         if (!searchQuery.trim()) {
           setError('Please enter an owner address');
+          setSearching(false);
           return;
         }
 
         if (!ethers.isAddress(searchQuery)) {
           setError('Please enter a valid Ethereum address');
+          setSearching(false);
           return;
         }
 
         try {
           const ownerDetails = await contract.getOwnerDetails(searchQuery);
-          
+
           if (!ownerDetails.name) {
             setError('Owner not found');
+            setSearching(false);
             return;
           }
 
@@ -198,67 +206,90 @@ export default function Search() {
           });
         } catch (error) {
           setError('Owner not found');
+          setSearching(false);
+          return;
         }
       } else if (searchType === 'location') {
         if (!selectedState) {
           setError('Please select a state');
+          setSearching(false);
           return;
         }
 
         try {
-          const propertyIds = await contract.searchPropertiesByLocation(selectedState, selectedDistrict);
-          
+          console.log('Searching for properties:', { state: selectedState, district: selectedDistrict });
+
+          // Pass empty string if district is not selected
+          const propertyIds = await contract.searchPropertiesByLocation(
+            selectedState,
+            selectedDistrict || ''
+          );
+
+          console.log('Found property IDs:', propertyIds);
+
           if (propertyIds.length === 0) {
-            setError('No properties found in the selected location');
+            setError(`No properties found in ${selectedDistrict ? `${selectedDistrict}, ` : ''}${selectedState}`);
+            setSearching(false);
             return;
           }
 
           // Fetch details for each property
           const propertyPromises = propertyIds.map(async (id: any) => {
-            const details = await contract.getPropertyDetails(Number(id));
-            return {
-              propertyId: Number(id),
-              propertyAddress: details.propertyAddress,
-              district: details.district,
-              state: details.state,
-              area: Number(details.area),
-              propertyType: details.propertyType,
-              surveyNumber: details.surveyNumber,
-              subDivision: details.subDivision,
-              currentOwner: details.currentOwner,
-              documentHash: details.documentHash,
-              isRegistered: details.isRegistered,
-              isVerified: details.isVerified,
-              isTransferable: details.isTransferable,
-              registrationDate: Number(details.registrationDate),
-              lastTransferDate: Number(details.lastTransferDate),
-              verificationFee: Number(details.verificationFee)
-            };
+            try {
+              const details = await contract.getPropertyDetails(Number(id));
+              return {
+                propertyId: Number(id),
+                propertyAddress: details.propertyAddress,
+                district: details.district,
+                state: details.state,
+                area: Number(details.area),
+                propertyType: details.propertyType,
+                surveyNumber: details.surveyNumber,
+                subDivision: details.subDivision,
+                currentOwner: details.currentOwner,
+                documentHash: details.documentHash,
+                isRegistered: details.isRegistered,
+                isVerified: details.isVerified,
+                isTransferable: details.isTransferable,
+                registrationDate: Number(details.registrationDate),
+                lastTransferDate: Number(details.lastTransferDate),
+                verificationFee: Number(details.verificationFee)
+              };
+            } catch (err) {
+              console.error(`Error loading property ${id}:`, err);
+              return null;
+            }
           });
 
-          const propertiesData = await Promise.all(propertyPromises);
-          setProperties(propertiesData);
-        } catch (error) {
-          setError('Failed to search properties by location');
+          const propertiesData = (await Promise.all(propertyPromises)).filter(p => p !== null);
+          console.log('Loaded properties:', propertiesData.length);
+          setProperties(propertiesData as Property[]);
+        } catch (error: any) {
+          console.error('Location search error:', error);
+          setError(`Failed to search properties: ${error.message || 'Unknown error'}`);
+          setSearching(false);
+          return;
         }
       } else if (searchType === 'idDocument') {
         if (!searchQuery.trim()) {
           setError('Please enter an ID document number');
+          setSearching(false);
           return;
         }
 
         try {
           const result = await contract.searchPropertiesByOwnerIdDocument(searchQuery);
-          
+
           if (result[0].length === 0) {
             setError('No owners found with this ID document');
+            setSearching(false);
             return;
           }
 
           // For now, show the first owner found
           const ownerAddress = ethers.getAddress(`0x${result[0][0].toString(16).padStart(40, '0')}`);
           const ownerDetails = await contract.getOwnerDetails(ownerAddress);
-          
+
           if (ownerDetails.name) {
             setOwner({
               ownerAddress: ownerDetails.ownerAddress,
@@ -273,6 +304,8 @@ export default function Search() {
         } catch (error) {
           console.error('ID Document search error:', error);
           setError('Failed to search by ID document');
+          setSearching(false);
+          return;
         }
       }
     } catch (error: any) {
@@ -307,7 +340,7 @@ export default function Search() {
                   <p className="text-xs text-gray-500">Search & Verify</p>
                 </div>
               </Link>
-              
+
               <div className="flex items-center space-x-4">
                 {isConnected ? (
                   <div className="text-right">
@@ -381,11 +414,10 @@ export default function Search() {
                     setProperties([]);
                     setError('');
                   }}
-                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${
-                    searchType === 'property'
+                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${searchType === 'property'
                       ? 'bg-white text-primary-600 shadow-md'
                       : 'text-gray-600 hover:text-primary-600'
-                  }`}
+                    }`}
                 >
                   🏡 Property ID
                 </button>
@@ -398,11 +430,10 @@ export default function Search() {
                     setProperties([]);
                     setError('');
                   }}
-                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${
-                    searchType === 'owner'
+                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${searchType === 'owner'
                       ? 'bg-white text-primary-600 shadow-md'
                       : 'text-gray-600 hover:text-primary-600'
-                  }`}
+                    }`}
                 >
                   👤 Owner Address
                 </button>
@@ -415,11 +446,10 @@ export default function Search() {
                     setProperties([]);
                     setError('');
                   }}
-                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${
-                    searchType === 'location'
+                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${searchType === 'location'
                       ? 'bg-white text-primary-600 shadow-md'
                       : 'text-gray-600 hover:text-primary-600'
-                  }`}
+                    }`}
                 >
                   � By Location
                 </button>
@@ -432,11 +462,10 @@ export default function Search() {
                     setProperties([]);
                     setError('');
                   }}
-                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${
-                    searchType === 'idDocument'
+                  className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${searchType === 'idDocument'
                       ? 'bg-white text-primary-600 shadow-md'
                       : 'text-gray-600 hover:text-primary-600'
-                  }`}
+                    }`}
                 >
                   🆔 By ID Document
                 </button>
@@ -457,9 +486,9 @@ export default function Search() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder={
-                      searchType === 'property' ? 'e.g., 1' : 
-                      searchType === 'owner' ? 'e.g., 0x123...abc' :
-                      'e.g., ABCDE1234F'
+                      searchType === 'property' ? 'e.g., 1' :
+                        searchType === 'owner' ? 'e.g., 0x123...abc' :
+                          'e.g., ABCDE1234F'
                     }
                   />
                 </div>
@@ -538,11 +567,10 @@ export default function Search() {
                 <h3 className="text-2xl font-bold text-gray-800">
                   Property #{property.propertyId}
                 </h3>
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  property.isVerified 
-                    ? 'bg-green-100 text-green-800' 
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${property.isVerified
+                    ? 'bg-green-100 text-green-800'
                     : 'bg-yellow-100 text-yellow-800'
-                }`}>
+                  }`}>
                   {property.isVerified ? '✅ Verified' : '⏳ Pending Verification'}
                 </span>
               </div>
@@ -597,9 +625,8 @@ export default function Search() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Transferable Status</p>
-                      <p className={`font-semibold ${
-                        property.isTransferable ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <p className={`font-semibold ${property.isTransferable ? 'text-green-600' : 'text-red-600'
+                        }`}>
                         {property.isTransferable ? '✅ Transferable' : '❌ Not Transferable'}
                       </p>
                     </div>
@@ -632,11 +659,10 @@ export default function Search() {
             <div className="bg-white rounded-xl shadow-lg p-8">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-2xl font-bold text-gray-800">Owner Profile</h3>
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  owner.isVerified 
-                    ? 'bg-green-100 text-green-800' 
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${owner.isVerified
+                    ? 'bg-green-100 text-green-800'
                     : 'bg-yellow-100 text-yellow-800'
-                }`}>
+                  }`}>
                   {owner.isVerified ? '✅ Verified' : '⏳ Pending Verification'}
                 </span>
               </div>
@@ -677,9 +703,8 @@ export default function Search() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Verification</p>
-                      <p className={`font-semibold ${
-                        owner.isVerified ? 'text-green-600' : 'text-yellow-600'
-                      }`}>
+                      <p className={`font-semibold ${owner.isVerified ? 'text-green-600' : 'text-yellow-600'
+                        }`}>
                         {owner.isVerified ? 'Government Verified' : 'Pending Government Verification'}
                       </p>
                     </div>
@@ -708,11 +733,10 @@ export default function Search() {
                       <h4 className="text-lg font-semibold text-gray-800">
                         Property #{prop.propertyId}
                       </h4>
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        prop.isVerified 
-                          ? 'bg-green-100 text-green-800' 
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${prop.isVerified
+                          ? 'bg-green-100 text-green-800'
                           : 'bg-yellow-100 text-yellow-800'
-                      }`}>
+                        }`}>
                         {prop.isVerified ? '✅' : '⏳'}
                       </span>
                     </div>
@@ -737,12 +761,11 @@ export default function Search() {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className={`text-xs font-semibold ${
-                        prop.isTransferable ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <span className={`text-xs font-semibold ${prop.isTransferable ? 'text-green-600' : 'text-red-600'
+                        }`}>
                         {prop.isTransferable ? 'Transferable' : 'Not Transferable'}
                       </span>
-                      
+
                       <Link
                         href={`/property/${prop.propertyId}`}
                         className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition"
