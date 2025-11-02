@@ -1,6 +1,6 @@
 {
-  "contractAddress": "0xbbA68E7E26343E93a1f2DbDDb126f2F64D80541b",
-  "deployedAt": "2025-11-01T16:32:43.937Z",
+  "contractAddress": "0x646A336CD183dc947D3AdbEfb19c3cF637720318",
+  "deployedAt": "2025-11-01T18:02:12.661Z",
   "network": "ganache",
   "chainId": 1337,
   "deployer": "0x95cED938F7991cd0dFcb48F0a06a40FA1aF46EBC"

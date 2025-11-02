@@ -120,7 +120,9 @@ export default function MyProperties() {
       const signer = await getSigner();
       const contract = getContract(signer);
 
+      console.log('Loading properties for account:', account);
       const propertyIds = await contract.getOwnerProperties(account);
+      console.log('Property IDs returned:', propertyIds);
 
       // Get list of deleted properties from localStorage
       const deletedProperties = JSON.parse(localStorage.getItem('deleted_properties') || '[]');
@@ -152,7 +154,9 @@ export default function MyProperties() {
 
       const propertiesData = await Promise.all(propertyPromises);
       // Filter out null values (deleted properties)
-      setProperties(propertiesData.filter(p => p !== null) as Property[]);
+      const filteredProperties = propertiesData.filter(p => p !== null) as Property[];
+      console.log('Loaded properties:', filteredProperties);
+      setProperties(filteredProperties);
     } catch (error) {
       console.error('Error loading properties:', error);
     } finally {

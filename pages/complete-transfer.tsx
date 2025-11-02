@@ -80,10 +80,19 @@ export default function CompleteTransfer() {
             const counter = await contract.transferRequestCounter();
             const requests: TransferRequest[] = [];
 
+            console.log(`Checking ${counter} transfer requests for account ${account}`);
+
             // Loop through all requests and find ones involving current user
             for (let i = 1; i <= Number(counter); i++) {
                 try {
                     const request = await contract.transferRequests(i);
+
+                    console.log(`Request ${i}:`, {
+                        fromOwner: request.fromOwner,
+                        toOwner: request.toOwner,
+                        isApproved: request.isApproved,
+                        isCompleted: request.isCompleted
+                    });
 
                     // Include if user is sender OR receiver, and request is approved but not completed
                     if (
@@ -112,6 +121,7 @@ export default function CompleteTransfer() {
                 }
             }
 
+            console.log(`Found ${requests.length} pending transfers`);
             setMyTransferRequests(requests);
         } catch (error) {
             console.error('Error loading transfer requests:', error);
@@ -265,17 +275,48 @@ export default function CompleteTransfer() {
                                     <p className="text-gray-600 mb-6">
                                         You don't have any approved transfer requests waiting to be completed
                                     </p>
+
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6 text-left max-w-2xl mx-auto">
+                                        <h4 className="font-bold text-blue-900 mb-3">📌 What does this mean?</h4>
+                                        <div className="space-y-2 text-sm text-blue-800">
+                                            <p>✅ <strong>If you're receiving a property:</strong></p>
+                                            <ul className="list-disc list-inside ml-4 space-y-1">
+                                                <li>The transfer may have already been completed - check "My Properties"</li>
+                                                <li>OR the transfer hasn't been approved by government yet</li>
+                                                <li>Make sure you're registered as an owner first (visit "Register Owner")</li>
+                                            </ul>
+                                            
+                                            <p className="mt-3">✅ <strong>If you're sending a property:</strong></p>
+                                            <ul className="list-disc list-inside ml-4 space-y-1">
+                                                <li>The transfer may have already been completed</li>
+                                                <li>OR it's still waiting for government approval</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
                                     <div className="space-y-3">
-                                        <Link
-                                            href="/my-properties"
-                                            className="inline-block px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
-                                        >
-                                            View My Properties
-                                        </Link>
-                                        <p className="text-sm text-gray-500">
-                                            If someone is transferring property to you, they'll need your wallet address:<br />
-                                            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{account}</span>
-                                        </p>
+                                        <div className="flex flex-wrap justify-center gap-3">
+                                            <Link
+                                                href="/my-properties"
+                                                className="inline-block px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                                            >
+                                                📋 View My Properties
+                                            </Link>
+                                            <Link
+                                                href="/register-owner"
+                                                className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                                            >
+                                                ✍️ Register as Owner
+                                            </Link>
+                                        </div>
+                                        <div className="bg-gray-50 rounded-lg p-4 max-w-md mx-auto">
+                                            <p className="text-xs text-gray-600 mb-2">
+                                                <strong>Your wallet address for receiving properties:</strong>
+                                            </p>
+                                            <p className="font-mono text-xs bg-white px-3 py-2 rounded border border-gray-300 break-all">
+                                                {account}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             ) : (

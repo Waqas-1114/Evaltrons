@@ -26,6 +26,34 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+/* Force all form inputs, selects, and textareas to have black text */
+input,
+select,
+textarea {
+  color: #000000 !important;
+}
+
+/* Ensure placeholder text is visible but slightly lighter */
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280 !important; /* gray-500 */
+  opacity: 1 !important;
+}
+
+/* Fix select dropdown option text */
+select option {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+/* Ensure disabled inputs are still readable */
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: #4b5563 !important; /* gray-600 */
+  opacity: 0.7;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
